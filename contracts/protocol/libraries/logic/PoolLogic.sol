@@ -7,7 +7,7 @@ import {IERC20} from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
 import {IAToken} from '../../../interfaces/IAToken.sol';
 import {ReserveConfiguration} from '../configuration/ReserveConfiguration.sol';
 import {Errors} from '../helpers/Errors.sol';
-import {WadRayMath} from '../math/WadRayMath.sol';
+import {TokenMath} from '../helpers/TokenMath.sol';
 import {DataTypes} from '../types/DataTypes.sol';
 import {ReserveLogic} from './ReserveLogic.sol';
 import {ValidationLogic} from './ValidationLogic.sol';
@@ -20,7 +20,7 @@ import {GenericLogic} from './GenericLogic.sol';
  */
 library PoolLogic {
   using GPv2SafeERC20 for IERC20;
-  using WadRayMath for uint256;
+  using TokenMath for uint256;
   using ReserveLogic for DataTypes.ReserveData;
   using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
 
@@ -100,8 +100,8 @@ library PoolLogic {
       if (accruedToTreasury != 0) {
         reserve.accruedToTreasury = 0;
         uint256 normalizedIncome = reserve.getNormalizedIncome();
-        uint256 amountToMint = accruedToTreasury.rayMul(normalizedIncome);
-        IAToken(reserve.aTokenAddress).mintToTreasury(amountToMint, normalizedIncome);
+        uint256 amountToMint = accruedToTreasury.getATokenMintScaledAmount(normalizedIncome);
+        IAToken(reserve.aTokenAddress).mintToTreasury(accruedToTreasury, normalizedIncome);
 
         emit MintedToTreasury(assetAddress, amountToMint);
       }

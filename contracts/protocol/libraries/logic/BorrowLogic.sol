@@ -14,6 +14,7 @@ import {DataTypes} from '../types/DataTypes.sol';
 import {ValidationLogic} from './ValidationLogic.sol';
 import {ReserveLogic} from './ReserveLogic.sol';
 import {IsolationModeLogic} from './IsolationModeLogic.sol';
+import {TokenMath} from '../../libraries/helpers/TokenMath.sol';
 
 /**
  * @title BorrowLogic library
@@ -21,6 +22,7 @@ import {IsolationModeLogic} from './IsolationModeLogic.sol';
  * @notice Implements the base logic for all the actions related to borrowing
  */
 library BorrowLogic {
+  using TokenMath for uint256;
   using ReserveLogic for DataTypes.ReserveCache;
   using ReserveLogic for DataTypes.ReserveData;
   using GPv2SafeERC20 for IERC20;
@@ -76,6 +78,10 @@ library BorrowLogic {
 
     reserve.updateState(reserveCache);
 
+    uint256 amountScaled = params.amount.getVTokenMintScaledAmount(
+      reserveCache.nextVariableBorrowIndex
+    );
+
     (
       bool isolationModeActive,
       address isolationModeCollateralAddress,
@@ -91,7 +97,7 @@ library BorrowLogic {
         userConfig: userConfig,
         asset: params.asset,
         userAddress: params.onBehalfOf,
-        amount: params.amount,
+        amountScaled: amountScaled,
         interestRateMode: params.interestRateMode,
         maxStableLoanPercent: params.maxStableRateBorrowSizePercent,
         reservesCount: params.reservesCount,
@@ -123,7 +129,7 @@ library BorrowLogic {
     } else {
       (isFirstBorrowing, reserveCache.nextScaledVariableDebt) = IVariableDebtToken(
         reserveCache.variableDebtTokenAddress
-      ).mint(params.user, params.onBehalfOf, params.amount, reserveCache.nextVariableBorrowIndex);
+      ).mint(params.user, params.onBehalfOf, params.amount, amountScaled, reserveCache.nextVariableBorrowIndex);
     }
 
     if (isFirstBorrowing) {

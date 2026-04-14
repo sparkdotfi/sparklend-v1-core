@@ -8,6 +8,8 @@ import {ReserveConfiguration} from '../configuration/ReserveConfiguration.sol';
 import {UserConfiguration} from '../configuration/UserConfiguration.sol';
 import {PercentageMath} from '../math/PercentageMath.sol';
 import {WadRayMath} from '../math/WadRayMath.sol';
+import {TokenMath} from '../helpers/TokenMath.sol';
+import {MathUtils} from '../math/MathUtils.sol';
 import {DataTypes} from '../types/DataTypes.sol';
 import {ReserveLogic} from './ReserveLogic.sol';
 import {EModeLogic} from './EModeLogic.sol';
@@ -19,6 +21,7 @@ import {EModeLogic} from './EModeLogic.sol';
  */
 library GenericLogic {
   using ReserveLogic for DataTypes.ReserveData;
+  using TokenMath for uint256;
   using WadRayMath for uint256;
   using PercentageMath for uint256;
   using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
@@ -197,7 +200,7 @@ library GenericLogic {
     uint256 totalDebtInBaseCurrency,
     uint256 ltv
   ) internal pure returns (uint256) {
-    uint256 availableBorrowsInBaseCurrency = totalCollateralInBaseCurrency.percentMul(ltv);
+    uint256 availableBorrowsInBaseCurrency = totalCollateralInBaseCurrency.percentMulFloor(ltv);
 
     if (availableBorrowsInBaseCurrency < totalDebtInBaseCurrency) {
       return 0;
@@ -225,20 +228,11 @@ library GenericLogic {
     uint256 assetUnit
   ) private view returns (uint256) {
     // fetching variable debt
-    uint256 userTotalDebt = IScaledBalanceToken(reserve.variableDebtTokenAddress).scaledBalanceOf(
-      user
-    );
-    if (userTotalDebt != 0) {
-      userTotalDebt = userTotalDebt.rayMul(reserve.getNormalizedDebt());
-    }
+    uint256 userTotalDebt = IScaledBalanceToken(reserve.variableDebtTokenAddress)
+      .scaledBalanceOf(user)
+      .getVTokenBalance(reserve.getNormalizedDebt());
 
-    userTotalDebt = userTotalDebt + IERC20(reserve.stableDebtTokenAddress).balanceOf(user);
-
-    userTotalDebt = assetPrice * userTotalDebt;
-
-    unchecked {
-      return userTotalDebt / assetUnit;
-    }
+    return MathUtils.mulDivCeil(userTotalDebt, assetPrice, assetUnit);
   }
 
   /**
@@ -257,9 +251,10 @@ library GenericLogic {
     uint256 assetPrice,
     uint256 assetUnit
   ) private view returns (uint256) {
-    uint256 normalizedIncome = reserve.getNormalizedIncome();
     uint256 balance = (
-      IScaledBalanceToken(reserve.aTokenAddress).scaledBalanceOf(user).rayMul(normalizedIncome)
+      IScaledBalanceToken(reserve.aTokenAddress).scaledBalanceOf(user).getATokenBalance(
+        reserve.getNormalizedIncome()
+      )
     ) * assetPrice;
 
     unchecked {

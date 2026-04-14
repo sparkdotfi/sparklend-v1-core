@@ -7,7 +7,7 @@ import {IAToken} from '../../../interfaces/IAToken.sol';
 import {Errors} from '../helpers/Errors.sol';
 import {UserConfiguration} from '../configuration/UserConfiguration.sol';
 import {DataTypes} from '../types/DataTypes.sol';
-import {WadRayMath} from '../math/WadRayMath.sol';
+import {TokenMath} from '../helpers/TokenMath.sol';
 import {PercentageMath} from '../math/PercentageMath.sol';
 import {ValidationLogic} from './ValidationLogic.sol';
 import {ReserveLogic} from './ReserveLogic.sol';
@@ -24,7 +24,7 @@ library SupplyLogic {
   using GPv2SafeERC20 for IERC20;
   using UserConfiguration for DataTypes.UserConfigurationMap;
   using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
-  using WadRayMath for uint256;
+  using TokenMath for uint256;
   using PercentageMath for uint256;
 
   // See `IPool` for descriptions
@@ -60,7 +60,9 @@ library SupplyLogic {
 
     reserve.updateState(reserveCache);
 
-    ValidationLogic.validateSupply(reserveCache, reserve, params.amount);
+    uint256 scaledAmount = params.amount.getATokenMintScaledAmount(reserveCache.nextLiquidityIndex);
+
+    ValidationLogic.validateSupply(reserveCache, reserve, scaledAmount);
 
     reserve.updateInterestRates(reserveCache, params.asset, params.amount, 0);
 
@@ -69,7 +71,7 @@ library SupplyLogic {
     bool isFirstSupply = IAToken(reserveCache.aTokenAddress).mint(
       msg.sender,
       params.onBehalfOf,
-      params.amount,
+      scaledAmount,
       reserveCache.nextLiquidityIndex
     );
 
@@ -115,46 +117,52 @@ library SupplyLogic {
 
     reserve.updateState(reserveCache);
 
-    uint256 userBalance = IAToken(reserveCache.aTokenAddress).scaledBalanceOf(msg.sender).rayMul(
-      reserveCache.nextLiquidityIndex
-    );
+    uint256 scaledUserBalance = IAToken(reserveCache.aTokenAddress).scaledBalanceOf(params.user);
 
-    uint256 amountToWithdraw = params.amount;
+    uint256 amountToWithdraw;
+    uint256 scaledAmountToWithdraw;
 
     if (params.amount == type(uint256).max) {
-      amountToWithdraw = userBalance;
+      scaledAmountToWithdraw = scaledUserBalance;
+
+      amountToWithdraw = scaledUserBalance.getATokenBalance(reserveCache.nextLiquidityIndex);
+    } else {
+      scaledAmountToWithdraw = params.amount.getATokenBurnScaledAmount(
+        reserveCache.nextLiquidityIndex
+      );
+
+      amountToWithdraw = params.amount;
     }
 
-    ValidationLogic.validateWithdraw(reserveCache, amountToWithdraw, userBalance);
+    ValidationLogic.validateWithdraw(reserveCache, scaledAmountToWithdraw, scaledUserBalance);
 
     reserve.updateInterestRates(reserveCache, params.asset, 0, amountToWithdraw);
 
-    bool isCollateral = userConfig.isUsingAsCollateral(reserve.id);
+    // As aToken.burn rounds up the burned shares, we ensure at least an equivalent of >= amountToWithdraw is burned.
+    bool zeroBalanceAfterBurn = IAToken(reserveCache.aTokenAddress).burn({
+      from: params.user,
+      receiverOfUnderlying: params.to,
+      amount: amountToWithdraw,
+      scaledAmount: scaledAmountToWithdraw,
+      index: reserveCache.nextLiquidityIndex
+    });
 
-    if (isCollateral && amountToWithdraw == userBalance) {
-      userConfig.setUsingAsCollateral(reserve.id, false);
-      emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
-    }
-
-    IAToken(reserveCache.aTokenAddress).burn(
-      msg.sender,
-      params.to,
-      amountToWithdraw,
-      reserveCache.nextLiquidityIndex
-    );
-
-    if (isCollateral && userConfig.isBorrowingAny()) {
-      ValidationLogic.validateHFAndLtv(
-        reservesData,
-        reservesList,
-        eModeCategories,
-        userConfig,
-        params.asset,
-        msg.sender,
-        params.reservesCount,
-        params.oracle,
-        params.userEModeCategory
-      );
+    if (userConfig.isUsingAsCollateral(reserve.id)) {
+      if (zeroBalanceAfterBurn) {
+        userConfig.setUsingAsCollateral(reserve.id, params.asset, params.user, false);
+      }
+      if (userConfig.isBorrowingAny()) {
+        ValidationLogic.validateHFAndLtvzero(
+          reservesData,
+          reservesList,
+          eModeCategories,
+          userConfig,
+          params.asset,
+          params.user,
+          params.oracle,
+          params.userEModeCategory
+        );
+      }
     }
 
     emit Withdraw(params.asset, msg.sender, params.to, amountToWithdraw);
@@ -187,12 +195,12 @@ library SupplyLogic {
 
     uint256 reserveId = reserve.id;
 
-    if (params.from != params.to && params.amount != 0) {
+    if (params.from != params.to && params.amount != 0 && params.scaledAmount != 0) {
       DataTypes.UserConfigurationMap storage fromConfig = usersConfig[params.from];
 
       if (fromConfig.isUsingAsCollateral(reserveId)) {
         if (fromConfig.isBorrowingAny()) {
-          ValidationLogic.validateHFAndLtv(
+          ValidationLogic.validateHFAndLtvzero(
             reservesData,
             reservesList,
             eModeCategories,
@@ -210,7 +218,7 @@ library SupplyLogic {
         }
       }
 
-      if (params.balanceToBefore == 0) {
+      if (params.scaledBalanceToBefore == 0) {
         DataTypes.UserConfigurationMap storage toConfig = usersConfig[params.to];
         if (
           ValidationLogic.validateAutomaticUseAsCollateral(
@@ -279,7 +287,7 @@ library SupplyLogic {
       emit ReserveUsedAsCollateralEnabled(asset, msg.sender);
     } else {
       userConfig.setUsingAsCollateral(reserve.id, false);
-      ValidationLogic.validateHFAndLtv(
+      ValidationLogic.validateHFAndLtvzero(
         reservesData,
         reservesList,
         eModeCategories,

@@ -12,7 +12,7 @@ import {IPoolAddressesProvider} from '../../../interfaces/IPoolAddressesProvider
 import {UserConfiguration} from '../configuration/UserConfiguration.sol';
 import {ReserveConfiguration} from '../configuration/ReserveConfiguration.sol';
 import {Errors} from '../helpers/Errors.sol';
-import {WadRayMath} from '../math/WadRayMath.sol';
+import {TokenMath} from '../helpers/TokenMath.sol';
 import {PercentageMath} from '../math/PercentageMath.sol';
 import {DataTypes} from '../types/DataTypes.sol';
 import {ValidationLogic} from './ValidationLogic.sol';
@@ -29,7 +29,7 @@ library FlashLoanLogic {
   using ReserveLogic for DataTypes.ReserveData;
   using GPv2SafeERC20 for IERC20;
   using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
-  using WadRayMath for uint256;
+  using TokenMath for uint256;
   using PercentageMath for uint256;
   using SafeCast for uint256;
 
@@ -94,7 +94,7 @@ library FlashLoanLogic {
       vars.currentAmount = params.amounts[vars.i];
       vars.totalPremiums[vars.i] = DataTypes.InterestRateMode(params.interestRateModes[vars.i]) ==
         DataTypes.InterestRateMode.NONE
-        ? vars.currentAmount.percentMul(vars.flashloanPremiumTotal)
+        ? vars.currentAmount.percentMulCeil(vars.flashloanPremiumTotal)
         : 0;
       IAToken(reservesData[params.assets[vars.i]].aTokenAddress).transferUnderlyingTo(
         params.receiverAddress,
@@ -159,7 +159,7 @@ library FlashLoanLogic {
     ValidationLogic.validateFlashloanSimple(reserve);
 
     IFlashLoanSimpleReceiver receiver = IFlashLoanSimpleReceiver(params.receiverAddress);
-    uint256 totalPremium = params.amount.percentMul(params.flashLoanPremiumTotal);
+    uint256 totalPremium = params.amount.percentMulCeil(params.flashLoanPremiumTotal);
     IAToken(reserve.aTokenAddress).transferUnderlyingTo(params.receiverAddress, params.amount);
 
     require(
@@ -209,7 +209,7 @@ library FlashLoanLogic {
     );
 
     reserve.accruedToTreasury += premiumToProtocol
-      .rayDiv(reserveCache.nextLiquidityIndex)
+      .getATokenMintScaledAmount(reserveCache.nextLiquidityIndex)
       .toUint128();
 
     reserve.updateInterestRates(reserveCache, params.asset, amountPlusPremium, 0);

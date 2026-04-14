@@ -574,9 +574,9 @@ contract Pool is VersionedInitializable, PoolStorage, IPool {
     address asset,
     address from,
     address to,
-    uint256 amount,
-    uint256 balanceFromBefore,
-    uint256 balanceToBefore
+    uint256 scaledAmount,
+    uint256 scaledBalanceFromBefore,
+    uint256 scaledBalanceToBefore
   ) external virtual override {
     require(msg.sender == _reserves[asset].aTokenAddress, Errors.CALLER_NOT_ATOKEN);
     SupplyLogic.executeFinalizeTransfer(
@@ -588,9 +588,9 @@ contract Pool is VersionedInitializable, PoolStorage, IPool {
         asset: asset,
         from: from,
         to: to,
-        amount: amount,
-        balanceFromBefore: balanceFromBefore,
-        balanceToBefore: balanceToBefore,
+        scaledAmount: scaledAmount,
+        scaledBalanceFromBefore: scaledBalanceFromBefore,
+        scaledBalanceToBefore: scaledBalanceToBefore,
         reservesCount: _reservesCount,
         oracle: ADDRESSES_PROVIDER.getPriceOracle(),
         fromEModeCategory: _usersEModeCategory[from]

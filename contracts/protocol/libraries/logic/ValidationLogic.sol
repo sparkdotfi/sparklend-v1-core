@@ -15,13 +15,14 @@ import {IAccessControl} from '../../../dependencies/openzeppelin/contracts/IAcce
 import {ReserveConfiguration} from '../configuration/ReserveConfiguration.sol';
 import {UserConfiguration} from '../configuration/UserConfiguration.sol';
 import {Errors} from '../helpers/Errors.sol';
-import {WadRayMath} from '../math/WadRayMath.sol';
+import {TokenMath} from '../helpers/TokenMath.sol';
 import {PercentageMath} from '../math/PercentageMath.sol';
 import {DataTypes} from '../types/DataTypes.sol';
 import {ReserveLogic} from './ReserveLogic.sol';
 import {GenericLogic} from './GenericLogic.sol';
 import {SafeCast} from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
 import {IncentivizedERC20} from '../../tokenization/base/IncentivizedERC20.sol';
+import {MathUtils} from '../math/MathUtils.sol';
 
 /**
  * @title ReserveLogic library
@@ -30,7 +31,7 @@ import {IncentivizedERC20} from '../../tokenization/base/IncentivizedERC20.sol';
  */
 library ValidationLogic {
   using ReserveLogic for DataTypes.ReserveData;
-  using WadRayMath for uint256;
+  using TokenMath for uint256;
   using PercentageMath for uint256;
   using SafeCast for uint256;
   using GPv2SafeERC20 for IERC20;
@@ -61,14 +62,14 @@ library ValidationLogic {
   /**
    * @notice Validates a supply action.
    * @param reserveCache The cached data of the reserve
-   * @param amount The amount to be supplied
+   * @param scaledAmount The scaledAmount to be supplied
    */
   function validateSupply(
     DataTypes.ReserveCache memory reserveCache,
     DataTypes.ReserveData storage reserve,
-    uint256 amount
+    uint256 scaledAmount
   ) internal view {
-    require(amount != 0, Errors.INVALID_AMOUNT);
+    require(scaledAmount != 0, Errors.INVALID_AMOUNT);
 
     (bool isActive, bool isFrozen, , , bool isPaused) = reserveCache
       .reserveConfiguration
@@ -80,8 +81,11 @@ library ValidationLogic {
     uint256 supplyCap = reserveCache.reserveConfiguration.getSupplyCap();
     require(
       supplyCap == 0 ||
-        ((IAToken(reserveCache.aTokenAddress).scaledTotalSupply() +
-          uint256(reserve.accruedToTreasury)).rayMul(reserveCache.nextLiquidityIndex) + amount) <=
+        (
+          (IAToken(reserveCache.aTokenAddress).scaledTotalSupply() +
+            scaledAmount +
+            uint256(reserve.accruedToTreasury)).getATokenBalance(reserveCache.nextLiquidityIndex)
+        ) <=
         supplyCap * (10 ** reserveCache.reserveConfiguration.getDecimals()),
       Errors.SUPPLY_CAP_EXCEEDED
     );
@@ -90,16 +94,16 @@ library ValidationLogic {
   /**
    * @notice Validates a withdraw action.
    * @param reserveCache The cached data of the reserve
-   * @param amount The amount to be withdrawn
-   * @param userBalance The balance of the user
+   * @param scaledAmount The scaled amount to be withdrawn
+   * @param scaledUserBalance The scaled balance of the user
    */
   function validateWithdraw(
     DataTypes.ReserveCache memory reserveCache,
-    uint256 amount,
-    uint256 userBalance
+    uint256 scaledAmount,
+    uint256 scaledUserBalance
   ) internal pure {
-    require(amount != 0, Errors.INVALID_AMOUNT);
-    require(amount <= userBalance, Errors.NOT_ENOUGH_AVAILABLE_USER_BALANCE);
+    require(scaledAmount != 0, Errors.INVALID_AMOUNT);
+    require(scaledAmount <= scaledUserBalance, Errors.NOT_ENOUGH_AVAILABLE_USER_BALANCE);
 
     (bool isActive, , , , bool isPaused) = reserveCache.reserveConfiguration.getFlags();
     require(isActive, Errors.RESERVE_INACTIVE);
@@ -107,14 +111,10 @@ library ValidationLogic {
   }
 
   struct ValidateBorrowLocalVars {
-    uint256 currentLtv;
-    uint256 collateralNeededInBaseCurrency;
-    uint256 userCollateralInBaseCurrency;
+    uint256 amount;
     uint256 userDebtInBaseCurrency;
     uint256 availableLiquidity;
-    uint256 healthFactor;
     uint256 totalDebt;
-    uint256 totalSupplyVariableDebt;
     uint256 reserveDecimals;
     uint256 borrowCap;
     uint256 amountInBaseCurrency;
@@ -125,7 +125,6 @@ library ValidationLogic {
     bool isFrozen;
     bool isPaused;
     bool borrowingEnabled;
-    bool stableRateBorrowingEnabled;
     bool siloedBorrowingEnabled;
   }
 
@@ -142,22 +141,24 @@ library ValidationLogic {
     mapping(uint8 => DataTypes.EModeCategory) storage eModeCategories,
     DataTypes.ValidateBorrowParams memory params
   ) internal view {
-    require(params.amount != 0, Errors.INVALID_AMOUNT);
+    require(params.amountScaled != 0, Errors.INVALID_AMOUNT);
 
     ValidateBorrowLocalVars memory vars;
+    vars.amount = params.amountScaled.getVTokenBalance(params.reserveCache.nextVariableBorrowIndex);
 
-    (
-      vars.isActive,
-      vars.isFrozen,
-      vars.borrowingEnabled,
-      vars.stableRateBorrowingEnabled,
-      vars.isPaused
-    ) = params.reserveCache.reserveConfiguration.getFlags();
+    (vars.isActive, vars.isFrozen, vars.borrowingEnabled, vars.isPaused) = params
+      .reserveCache
+      .reserveConfiguration
+      .getFlags();
 
     require(vars.isActive, Errors.RESERVE_INACTIVE);
     require(!vars.isPaused, Errors.RESERVE_PAUSED);
     require(!vars.isFrozen, Errors.RESERVE_FROZEN);
     require(vars.borrowingEnabled, Errors.BORROWING_NOT_ENABLED);
+    require(
+      IERC20(params.reserveCache.aTokenAddress).totalSupply() >= vars.amount,
+      Errors.INVALID_AMOUNT
+    );
 
     require(
       params.priceOracleSentinel == address(0) ||
@@ -179,36 +180,12 @@ library ValidationLogic {
     }
 
     if (vars.borrowCap != 0) {
-      vars.totalSupplyVariableDebt = params.reserveCache.currScaledVariableDebt.rayMul(
-        params.reserveCache.nextVariableBorrowIndex
-      );
-
-      vars.totalDebt =
-        params.reserveCache.currTotalStableDebt +
-        vars.totalSupplyVariableDebt +
-        params.amount;
+      vars.totalDebt = (params.reserveCache.currScaledVariableDebt + params.amountScaled)
+        .getVTokenBalance(params.reserveCache.nextVariableBorrowIndex);
 
       unchecked {
         require(vars.totalDebt <= vars.borrowCap * vars.assetUnit, Errors.BORROW_CAP_EXCEEDED);
       }
-    }
-
-    if (params.isolationModeActive) {
-      // check that the asset being borrowed is borrowable in isolation mode AND
-      // the total exposure is no bigger than the collateral debt ceiling
-      require(
-        params.reserveCache.reserveConfiguration.getBorrowableInIsolation(),
-        Errors.ASSET_NOT_BORROWABLE_IN_ISOLATION
-      );
-
-      require(
-        reservesData[params.isolationModeCollateralAddress].isolationModeTotalDebt +
-          (params.amount /
-            10 ** (vars.reserveDecimals - ReserveConfiguration.DEBT_CEILING_DECIMALS))
-            .toUint128() <=
-          params.isolationModeDebtCeiling,
-        Errors.DEBT_CEILING_EXCEEDED
-      );
     }
 
     if (params.userEModeCategory != 0) {
@@ -217,81 +194,6 @@ library ValidationLogic {
         Errors.INCONSISTENT_EMODE_CATEGORY
       );
       vars.eModePriceSource = eModeCategories[params.userEModeCategory].priceSource;
-    }
-
-    (
-      vars.userCollateralInBaseCurrency,
-      vars.userDebtInBaseCurrency,
-      vars.currentLtv,
-      ,
-      vars.healthFactor,
-
-    ) = GenericLogic.calculateUserAccountData(
-      reservesData,
-      reservesList,
-      eModeCategories,
-      DataTypes.CalculateUserAccountDataParams({
-        userConfig: params.userConfig,
-        reservesCount: params.reservesCount,
-        user: params.userAddress,
-        oracle: params.oracle,
-        userEModeCategory: params.userEModeCategory
-      })
-    );
-
-    require(vars.userCollateralInBaseCurrency != 0, Errors.COLLATERAL_BALANCE_IS_ZERO);
-    require(vars.currentLtv != 0, Errors.LTV_VALIDATION_FAILED);
-
-    require(
-      vars.healthFactor > HEALTH_FACTOR_LIQUIDATION_THRESHOLD,
-      Errors.HEALTH_FACTOR_LOWER_THAN_LIQUIDATION_THRESHOLD
-    );
-
-    vars.amountInBaseCurrency =
-      IPriceOracleGetter(params.oracle).getAssetPrice(
-        vars.eModePriceSource != address(0) ? vars.eModePriceSource : params.asset
-      ) *
-      params.amount;
-    unchecked {
-      vars.amountInBaseCurrency /= vars.assetUnit;
-    }
-
-    //add the current already borrowed amount to the amount requested to calculate the total collateral needed.
-    vars.collateralNeededInBaseCurrency = (vars.userDebtInBaseCurrency + vars.amountInBaseCurrency)
-      .percentDiv(vars.currentLtv); //LTV is calculated in percentage
-
-    require(
-      vars.collateralNeededInBaseCurrency <= vars.userCollateralInBaseCurrency,
-      Errors.COLLATERAL_CANNOT_COVER_NEW_BORROW
-    );
-
-    /**
-     * Following conditions need to be met if the user is borrowing at a stable rate:
-     * 1. Reserve must be enabled for stable rate borrowing
-     * 2. Users cannot borrow from the reserve if their collateral is (mostly) the same currency
-     *    they are borrowing, to prevent abuses.
-     * 3. Users will be able to borrow only a portion of the total available liquidity
-     */
-
-    if (params.interestRateMode == DataTypes.InterestRateMode.STABLE) {
-      //check if the borrow mode is stable and if stable rate borrowing is enabled on this reserve
-
-      require(vars.stableRateBorrowingEnabled, Errors.STABLE_BORROWING_NOT_ENABLED);
-
-      require(
-        !params.userConfig.isUsingAsCollateral(reservesData[params.asset].id) ||
-          params.reserveCache.reserveConfiguration.getLtv() == 0 ||
-          params.amount > IERC20(params.reserveCache.aTokenAddress).balanceOf(params.userAddress),
-        Errors.COLLATERAL_SAME_AS_BORROWING_CURRENCY
-      );
-
-      vars.availableLiquidity = IERC20(params.asset).balanceOf(params.reserveCache.aTokenAddress);
-
-      //calculate the max available loan size in stable rate mode as a percentage of the
-      //available liquidity
-      uint256 maxLoanSizeStable = vars.availableLiquidity.percentMul(params.maxStableLoanPercent);
-
-      require(params.amount <= maxLoanSizeStable, Errors.AMOUNT_BIGGER_THAN_MAX_LOAN_SIZE_STABLE);
     }
 
     if (params.userConfig.isBorrowingAny()) {
@@ -577,6 +479,59 @@ library ValidationLogic {
   }
 
   /**
+   * @notice Validates the health factor of a user and the ltv of the asset being borrowed.
+   *         The ltv validation is a measure to prevent accidental borrowing close to liquidations.
+   *         Sophisticated users can work around this validation in various ways.
+   * @param reservesData The state of all the reserves
+   * @param reservesList The addresses of all the active reserves
+   * @param eModeCategories The configuration of all the efficiency mode categories
+   * @param userConfig The state of the user for the specific reserve
+   * @param user The user from which the aTokens are being transferred
+   * @param userEModeCategory The users active efficiency mode category
+   * @param oracle The price oracle
+   */
+  function validateHFAndLtv(
+    mapping(address => DataTypes.ReserveData) storage reservesData,
+    mapping(uint256 => address) storage reservesList,
+    mapping(uint8 => DataTypes.EModeCategory) storage eModeCategories,
+    DataTypes.UserConfigurationMap memory userConfig,
+    address user,
+    uint8 userEModeCategory,
+    address oracle
+  ) internal view {
+    (
+      uint256 userCollateralInBaseCurrency,
+      uint256 userDebtInBaseCurrency,
+      uint256 currentLtv,
+      ,
+      uint256 healthFactor,
+
+    ) = GenericLogic.calculateUserAccountData(
+        reservesData,
+        reservesList,
+        eModeCategories,
+        DataTypes.CalculateUserAccountDataParams({
+          userConfig: userConfig,
+          user: user,
+          oracle: oracle,
+          userEModeCategory: userEModeCategory
+        })
+      );
+
+    require(currentLtv != 0, Errors.LTV_VALIDATION_FAILED);
+
+    require(
+      healthFactor >= HEALTH_FACTOR_LIQUIDATION_THRESHOLD,
+      Errors.HEALTH_FACTOR_LOWER_THAN_LIQUIDATION_THRESHOLD
+    );
+
+    require(
+      userCollateralInBaseCurrency >= userDebtInBaseCurrency.percentDivCeil(currentLtv),
+      Errors.COLLATERAL_CANNOT_COVER_NEW_BORROW
+    );
+  }
+
+  /**
    * @notice Validates the health factor of a user and the ltv of the asset being withdrawn.
    * @param reservesData The state of all the reserves
    * @param reservesList The addresses of all the active reserves
@@ -588,7 +543,7 @@ library ValidationLogic {
    * @param oracle The price oracle
    * @param userEModeCategory The users active efficiency mode category
    */
-  function validateHFAndLtv(
+  function validateHFAndLtvzero(
     mapping(address => DataTypes.ReserveData) storage reservesData,
     mapping(uint256 => address) storage reservesList,
     mapping(uint8 => DataTypes.EModeCategory) storage eModeCategories,

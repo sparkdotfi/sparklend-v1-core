@@ -4,7 +4,7 @@ pragma solidity ^0.8.10;
 import {IERC20} from '../../dependencies/openzeppelin/contracts/IERC20.sol';
 import {SafeCast} from '../../dependencies/openzeppelin/contracts/SafeCast.sol';
 import {VersionedInitializable} from '../libraries/aave-upgradeability/VersionedInitializable.sol';
-import {WadRayMath} from '../libraries/math/WadRayMath.sol';
+import {TokenMath} from '../libraries/helpers/TokenMath.sol';
 import {Errors} from '../libraries/helpers/Errors.sol';
 import {IPool} from '../../interfaces/IPool.sol';
 import {IAaveIncentivesController} from '../../interfaces/IAaveIncentivesController.sol';
@@ -22,7 +22,7 @@ import {ScaledBalanceTokenBase} from './base/ScaledBalanceTokenBase.sol';
  * @dev Transfer and approve functionalities are disabled since its a non-transferable token
  */
 contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDebtToken {
-  using WadRayMath for uint256;
+  using TokenMath for uint256;
   using SafeCast for uint256;
 
   uint256 public constant DEBT_TOKEN_REVISION = 0x1;
@@ -78,13 +78,10 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
 
   /// @inheritdoc IERC20
   function balanceOf(address user) public view virtual override returns (uint256) {
-    uint256 scaledBalance = super.balanceOf(user);
-
-    if (scaledBalance == 0) {
-      return 0;
-    }
-
-    return scaledBalance.rayMul(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
+    return
+      super.balanceOf(user).getVTokenBalance(
+        POOL.getReserveNormalizedVariableDebt(_underlyingAsset)
+      );
   }
 
   /// @inheritdoc IVariableDebtToken
@@ -92,27 +89,79 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     address user,
     address onBehalfOf,
     uint256 amount,
+    uint256 scaledAmount,
     uint256 index
-  ) external virtual override onlyPool returns (bool, uint256) {
+  ) external virtual override onlyPool returns (uint256) {
+    uint256 scaledBalanceOfUser = super.balanceOf(user);
+
     if (user != onBehalfOf) {
-      _decreaseBorrowAllowance(onBehalfOf, user, amount);
+      // This comment explains the logic behind the borrow allowance spent calculation.
+      //
+      // Problem:
+      // Simply decreasing the allowance by the input `amount` is not ideal for scaled-balance tokens.
+      // Due to rounding, the actual increase in the user's debt (`debt_increase`) can be slightly
+      // larger than the input `amount`.
+      //
+      // Definitions:
+      // - `amount`: The unscaled amount to be borrowed, passed as the `amount` argument.
+      // - `debt_increase`: The actual unscaled debt increase for the user.
+      // - `allowance_spent`: The unscaled amount deducted from the delegatee's borrow allowance. Equivalent to `debt_increase`.
+      //
+      // Solution:
+      // To handle this, `allowance_spent` must be exactly equal to `debt_increase`.
+      // We calculate `debt_increase` precisely by simulating the effect of the borrow on the user's balance.
+      // By passing `debt_increase` to `_decreaseBorrowAllowance`, we ensure `allowance_spent` is as close as possible to `debt_increase`.
+      //
+      // Backward Compatibility & Guarantees:
+      // This implementation is backward-compatible and secure. The `_decreaseBorrowAllowance` function has a critical feature:
+      // 1. It REQUIRES the borrow allowance to be >= `amount` (the user's requested borrow amount).
+      // 2. The amount consumed from the allowance is `debt_increase`, but it is capped at the `currentAllowance`.
+      // This means if a user has a borrow allowance of 100 wei and `borrow` is called with an `amount` of 100, the call will succeed
+      // even if the calculated `debt_increase` is 101 wei. In that specific scenario, the allowance consumed will be 100 wei (since that is the `currentAllowance`),
+      // and the transaction will not revert. But if the allowance is 101 wei, then the allowance consumed will be 101 wei.
+      //
+      // uint256 debt_increase = balanceAfter - balanceBefore = (scaledBalanceOfUser + scaledAmount).getVTokenBalance(index) - scaledBalanceOfUser.getVTokenBalance(index);
+      // Due to limitations of the solidity compiler, the calculation is inlined for gas efficiency.
+      _decreaseBorrowAllowance(
+        onBehalfOf,
+        user,
+        amount,
+        (scaledBalanceOfUser + scaledAmount).getVTokenBalance(index) -
+          scaledBalanceOfUser.getVTokenBalance(index)
+      );
     }
-    return (_mintScaled(user, onBehalfOf, amount, index), scaledTotalSupply());
+    _mintScaled({
+      caller: user,
+      onBehalfOf: onBehalfOf,
+      amountScaled: scaledAmount,
+      index: index,
+      getTokenBalance: TokenMath.getVTokenBalance
+    });
+    return scaledTotalSupply();
   }
 
   /// @inheritdoc IVariableDebtToken
   function burn(
     address from,
-    uint256 amount,
+    uint256 scaledAmount,
     uint256 index
-  ) external virtual override onlyPool returns (uint256) {
-    _burnScaled(from, address(0), amount, index);
-    return scaledTotalSupply();
+  ) external virtual override onlyPool returns (bool, uint256) {
+    return (
+      _burnScaled({
+        user: from,
+        target: address(0),
+        amountScaled: scaledAmount,
+        index: index,
+        getTokenBalance: TokenMath.getVTokenBalance
+      }),
+      scaledTotalSupply()
+    );
   }
 
   /// @inheritdoc IERC20
   function totalSupply() public view virtual override returns (uint256) {
-    return super.totalSupply().rayMul(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
+    return
+      super.totalSupply().getVTokenBalance(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
   }
 
   /// @inheritdoc EIP712Base
