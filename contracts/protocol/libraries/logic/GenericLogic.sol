@@ -229,7 +229,7 @@ library GenericLogic {
       user
     );
     if (userTotalDebt != 0) {
-      userTotalDebt = userTotalDebt.rayMul(reserve.getNormalizedDebt());
+      userTotalDebt = userTotalDebt.rayMulRoundUp(reserve.getNormalizedDebt());
     }
 
     userTotalDebt = userTotalDebt + IERC20(reserve.stableDebtTokenAddress).balanceOf(user);
@@ -259,7 +259,7 @@ library GenericLogic {
   ) private view returns (uint256) {
     uint256 normalizedIncome = reserve.getNormalizedIncome();
     uint256 balance = (
-      IScaledBalanceToken(reserve.aTokenAddress).scaledBalanceOf(user).rayMul(normalizedIncome)
+      IScaledBalanceToken(reserve.aTokenAddress).scaledBalanceOf(user).rayMulRoundDown(normalizedIncome)
     ) * assetPrice;
 
     unchecked {

@@ -92,6 +92,66 @@ library WadRayMath {
   }
 
   /**
+   * @notice Multiplies two ray, rounding down (truncating)
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raymul b, rounded down
+   */
+  function rayMulRoundDown(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      if iszero(or(iszero(b), iszero(gt(a, div(sub(not(0), HALF_RAY), b))))) {
+        revert(0, 0)
+      }
+      c := div(mul(a, b), RAY)
+    }
+  }
+
+  /**
+   * @notice Multiplies two ray, rounding up
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raymul b, rounded up
+   */
+  function rayMulRoundUp(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      if iszero(or(iszero(b), iszero(gt(a, div(sub(not(0), HALF_RAY), b))))) {
+        revert(0, 0)
+      }
+      c := div(add(mul(a, b), sub(RAY, 1)), RAY)
+    }
+  }
+
+  /**
+   * @notice Divides two ray, rounding down (truncating)
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raydiv b, rounded down
+   */
+  function rayDivRoundDown(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      if or(iszero(b), iszero(iszero(gt(a, div(sub(not(0), div(b, 2)), RAY))))) {
+        revert(0, 0)
+      }
+      c := div(mul(a, RAY), b)
+    }
+  }
+
+  /**
+   * @notice Divides two ray, rounding up
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raydiv b, rounded up
+   */
+  function rayDivRoundUp(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      if or(iszero(b), iszero(iszero(gt(a, div(sub(not(0), div(b, 2)), RAY))))) {
+        revert(0, 0)
+      }
+      c := div(add(mul(a, RAY), sub(b, 1)), b)
+    }
+  }
+
+  /**
    * @dev Casts ray down to wad
    * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
    * @param a Ray

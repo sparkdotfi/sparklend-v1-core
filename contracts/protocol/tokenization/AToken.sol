@@ -128,7 +128,7 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
   function balanceOf(
     address user
   ) public view virtual override(IncentivizedERC20, IERC20) returns (uint256) {
-    return super.balanceOf(user).rayMul(POOL.getReserveNormalizedIncome(_underlyingAsset));
+    return super.balanceOf(user).rayMulRoundDown(POOL.getReserveNormalizedIncome(_underlyingAsset));
   }
 
   /// @inheritdoc IERC20
@@ -139,7 +139,7 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
       return 0;
     }
 
-    return currentSupplyScaled.rayMul(POOL.getReserveNormalizedIncome(_underlyingAsset));
+    return currentSupplyScaled.rayMulRoundDown(POOL.getReserveNormalizedIncome(_underlyingAsset));
   }
 
   /// @inheritdoc IAToken
