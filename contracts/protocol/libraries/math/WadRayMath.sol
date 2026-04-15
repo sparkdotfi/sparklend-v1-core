@@ -92,6 +92,42 @@ library WadRayMath {
   }
 
   /**
+   * @notice Divides two ray, rounding up to the nearest ray
+   * @dev assembly optimized for improved gas savings
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raydiv b, rounded up
+   */
+  function rayDivCeil(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    // to avoid overflow, a <= type(uint256).max / RAY
+    assembly {
+      if or(iszero(b), iszero(iszero(gt(a, div(not(0), RAY))))) {
+        revert(0, 0)
+      }
+
+      let scaled := mul(a, RAY)
+      c := add(div(scaled, b), iszero(iszero(mod(scaled, b))))
+    }
+  }
+
+  /**
+   * @notice Divides two ray, rounding down (truncating) to the nearest ray
+   * @dev assembly optimized for improved gas savings
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raydiv b, rounded down
+   */
+  function rayDivFloor(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      if or(iszero(b), iszero(iszero(gt(a, div(not(0), RAY))))) {
+        revert(0, 0)
+      }
+
+      c := div(mul(a, RAY), b)
+    }
+  }
+
+  /**
    * @dev Casts ray down to wad
    * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
    * @param a Ray

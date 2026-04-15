@@ -69,7 +69,7 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     uint256 amount,
     uint256 index
   ) internal returns (bool) {
-    uint256 amountScaled = amount.rayDiv(index);
+    uint256 amountScaled = amount.rayDivFloor(index);
     require(amountScaled != 0, Errors.INVALID_MINT_AMOUNT);
 
     uint256 scaledBalance = super.balanceOf(onBehalfOf);
@@ -97,7 +97,7 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    * @param index The variable debt index of the reserve
    */
   function _burnScaled(address user, address target, uint256 amount, uint256 index) internal {
-    uint256 amountScaled = amount.rayDiv(index);
+    uint256 amountScaled = amount.rayDivCeil(index);
     require(amountScaled != 0, Errors.INVALID_BURN_AMOUNT);
 
     uint256 scaledBalance = super.balanceOf(user);
