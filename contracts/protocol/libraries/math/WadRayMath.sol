@@ -92,6 +92,43 @@ library WadRayMath {
   }
 
   /**
+   * @notice Divides two ray, rounding up to the nearest ray
+   * @dev assembly optimized for improved gas savings
+   * @dev copied from aave-v3-origin: https://github.com/aave-dao/aave-v3-origin/blob/v3.6.0/src/contracts/protocol/libraries/math/WadRayMath.sol#L114-L123
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raydiv b, rounded up
+   */
+  function rayDivCeil(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      // Overflow check: Ensure a * RAY does not exceed uint256 max
+      if or(iszero(b), iszero(iszero(gt(a, div(not(0), RAY))))) {
+        revert(0, 0)
+      }
+      let scaled := mul(a, RAY)
+      c := add(div(scaled, b), iszero(iszero(mod(scaled, b))))
+    }
+  }
+
+  /**
+   * @notice Divides two ray, rounding down (truncating) to the nearest ray
+   * @dev assembly optimized for improved gas savings
+   * @dev copied from aave-v3-origin: https://github.com/aave-dao/aave-v3-origin/blob/v3.6.0/src/contracts/protocol/libraries/math/WadRayMath.sol#L125-L133
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raydiv b, rounded down
+   */
+  function rayDivFloor(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      // Overflow check: Ensure a * RAY does not exceed uint256 max
+      if or(iszero(b), iszero(iszero(gt(a, div(not(0), RAY))))) {
+        revert(0, 0)
+      }
+      c := div(mul(a, RAY), b)
+    }
+  }
+
+  /**
    * @dev Casts ray down to wad
    * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
    * @param a Ray
