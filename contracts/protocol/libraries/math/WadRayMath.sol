@@ -94,7 +94,7 @@ library WadRayMath {
   /**
    * @notice Divides two ray, rounding up to the nearest ray
    * @dev assembly optimized for improved gas savings
-   * @dev copied from aave-v3-origin: https://github.com/aave-dao/aave-v3-origin/blob/1e3d70c4151a94166ebc59e2eaa4aff6e6ba6978/src/contracts/protocol/libraries/math/WadRayMath.sol#L114-L123
+   * @dev copied from aave-v3-origin: https://github.com/aave-dao/aave-v3-origin/blob/v3.6.0/src/contracts/protocol/libraries/math/WadRayMath.sol#L114-L123
    * @param a Ray
    * @param b Ray
    * @return c = a raydiv b, rounded up
@@ -113,7 +113,7 @@ library WadRayMath {
   /**
    * @notice Divides two ray, rounding down (truncating) to the nearest ray
    * @dev assembly optimized for improved gas savings
-   * @dev copied from aave-v3-origin: https://github.com/aave-dao/aave-v3-origin/blob/1e3d70c4151a94166ebc59e2eaa4aff6e6ba6978/src/contracts/protocol/libraries/math/WadRayMath.sol#L125-L133
+   * @dev copied from aave-v3-origin: https://github.com/aave-dao/aave-v3-origin/blob/v3.6.0/src/contracts/protocol/libraries/math/WadRayMath.sol#L125-L133
    * @param a Ray
    * @param b Ray
    * @return c = a raydiv b, rounded down
