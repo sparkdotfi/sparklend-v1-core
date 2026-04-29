@@ -98,9 +98,14 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    */
   function _burnScaled(address user, address target, uint256 amount, uint256 index) internal {
     uint256 amountScaled = amount.rayDivCeil(index);
+    uint256 scaledBalance = super.balanceOf(user);
+
+    if (amountScaled > scaledBalance) {
+      amountScaled = scaledBalance;
+    }
+
     require(amountScaled != 0, Errors.INVALID_BURN_AMOUNT);
 
-    uint256 scaledBalance = super.balanceOf(user);
     uint256 balanceIncrease = scaledBalance.rayMul(index) -
       scaledBalance.rayMul(_userState[user].additionalData);
 

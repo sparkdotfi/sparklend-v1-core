@@ -23,6 +23,8 @@ declare module '@ethersproject/bignumber' {
     wadDiv: (a: BigNumber) => BigNumber;
     rayMul: (a: BigNumber) => BigNumber;
     rayDiv: (a: BigNumber) => BigNumber;
+    rayDivFloor: (a: BigNumber) => BigNumber;
+    rayDivCeil: (a: BigNumber) => BigNumber;
     percentMul: (a: BigNumberish) => BigNumber;
     percentDiv: (a: BigNumberish) => BigNumber;
     rayToWad: () => BigNumber;
@@ -54,6 +56,14 @@ BigNumber.prototype.rayMul = function (other: BigNumber): BigNumber {
 BigNumber.prototype.rayDiv = function (other: BigNumber): BigNumber {
   const halfOther = other.div(2);
   return halfOther.add(this.mul(this.ray())).div(other);
+};
+
+BigNumber.prototype.rayDivFloor = function (other: BigNumber): BigNumber {
+  return this.mul(this.ray()).div(other);
+};
+
+BigNumber.prototype.rayDivCeil = function (other: BigNumber): BigNumber {
+  return this.mul(this.ray()).add(other.sub(1)).div(other);
 };
 
 BigNumber.prototype.percentMul = function (bps: BigNumberish): BigNumber {

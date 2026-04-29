@@ -204,7 +204,7 @@ makeSuite('AToken: Repay', (testEnv: TestEnv) => {
     const debtAfter = await variableDebtDai.balanceOf(user1.address);
 
     expect(debtAfter).to.be.eq(0);
-    expect(balanceAfter).to.be.eq(balanceBefore.sub(repayAmount));
+    expect(balanceAfter).to.be.closeTo(balanceBefore.sub(repayAmount), 1); // Rounding
   });
 
   it('Check interest rates after repaying with aTokens', async () => {

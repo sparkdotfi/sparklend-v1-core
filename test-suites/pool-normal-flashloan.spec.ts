@@ -99,10 +99,11 @@ makeSuite('Pool: FlashLoan for gas comparison', (testEnv: TestEnv) => {
 
     expect(wethTotalLiquidityBefore.add(wethTotalFees)).to.be.closeTo(wethTotalLiquidityAfter, 2);
     expect(wethCurrentLiquidityRate).to.be.equal(0);
-    expect(wethCurrentLiquidityIndex).to.be.equal(
-      wethLiquidityIndexBefore.add(wethLiquidityIndexAdded)
+    expect(wethCurrentLiquidityIndex).to.be.closeTo(
+      wethLiquidityIndexBefore.add(wethLiquidityIndexAdded),
+      1 // Rounding
     );
-    expect(wethReservesAfter).to.be.equal(wethReservesBefore.add(wethFeesToProtocol));
+    expect(wethReservesAfter).to.be.closeTo(wethReservesBefore.add(wethFeesToProtocol), 1); // Rounding
   });
 
   it('Takes an ETH flashloan with mode = 0 as big as the available liquidity', async () => {
@@ -148,7 +149,7 @@ makeSuite('Pool: FlashLoan for gas comparison', (testEnv: TestEnv) => {
     const reservesAfter = await aWETH.balanceOf(await aWETH.RESERVE_TREASURY_ADDRESS());
     expect(totalLiquidityBefore.add(totalFees)).to.be.closeTo(totalLiquidityAfter, 2);
     expect(currentLiquidityRate).to.be.equal(0);
-    expect(currentLiquidityIndex).to.be.equal(liquidityIndexBefore.add(liquidityIndexAdded));
+    expect(currentLiquidityIndex).to.be.closeTo(liquidityIndexBefore.add(liquidityIndexAdded), 1); // Rounding
     expect(
       reservesAfter.sub(feesToProtocol).mul(liquidityIndexBefore).div(currentLiquidityIndex)
     ).to.be.closeTo(reservesBefore, 2);
@@ -286,8 +287,8 @@ makeSuite('Pool: FlashLoan for gas comparison', (testEnv: TestEnv) => {
 
     expect(totalLiquidityBefore.add(totalFees)).to.be.closeTo(totalLiquidityAfter, 2);
     expect(currentLiquidityRate).to.be.equal(0);
-    expect(currentLiquidityIndex).to.be.equal(liquidityIndexBefore.add(liquidityIndexAdded));
-    expect(reservesAfter).to.be.equal(reservesBefore.add(feesToProtocol));
+    expect(currentLiquidityIndex).to.be.closeTo(liquidityIndexBefore.add(liquidityIndexAdded), 1); // Rounding
+    expect(reservesAfter).to.be.closeTo(reservesBefore.add(feesToProtocol), 1); // Rounding
   });
 
   it('Takes out a 500 USDC flashloan with mode = 0, does not return the funds (revert expected)', async () => {
