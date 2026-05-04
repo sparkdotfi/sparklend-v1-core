@@ -60,6 +60,7 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    * @param caller The address performing the mint
    * @param onBehalfOf The address of the user that will receive the scaled tokens
    * @param amount The amount of tokens getting minted
+   * @param amountScaled The amount getting minted in scaled form
    * @param index The next liquidity index of the reserve
    * @return `true` if the the previous balance of the user was 0
    */
@@ -67,9 +68,9 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     address caller,
     address onBehalfOf,
     uint256 amount,
+    uint256 amountScaled,
     uint256 index
   ) internal returns (bool) {
-    uint256 amountScaled = amount.rayDivFloor(index);
     require(amountScaled != 0, Errors.INVALID_MINT_AMOUNT);
 
     uint256 scaledBalance = super.balanceOf(onBehalfOf);
@@ -94,10 +95,16 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    * @param user The user which debt is burnt
    * @param target The address that will receive the underlying, if any
    * @param amount The amount getting burned
+   * @param amountScaled The amount getting burned in scaled form
    * @param index The variable debt index of the reserve
    */
-  function _burnScaled(address user, address target, uint256 amount, uint256 index) internal {
-    uint256 amountScaled = amount.rayDivCeil(index);
+  function _burnScaled(
+    address user,
+    address target,
+    uint256 amount,
+    uint256 amountScaled,
+    uint256 index
+  ) internal {
     uint256 scaledBalance = super.balanceOf(user);
 
     if (amountScaled > scaledBalance) {
