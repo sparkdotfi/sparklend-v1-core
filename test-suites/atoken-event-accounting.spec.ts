@@ -552,7 +552,7 @@ makeSuite('AToken: Mint and Burn Event Accounting', (testEnv) => {
     // check transfer event
     expect(parsedTransferEvent.args.from).to.equal(ZERO_ADDRESS);
     expect(parsedTransferEvent.args.to).to.equal(depositor.address);
-    expect(parsedTransferEvent.args.value).to.be.closeTo(totalMinted, 2);
+    expect(parsedTransferEvent.args.value).to.be.closeTo(totalMinted, 3);
 
     // check mint event
     expect(parsedMintEvent.caller).to.equal(depositor.address);

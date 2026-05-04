@@ -74,6 +74,45 @@ library WadRayMath {
   }
 
   /**
+   * @notice Multiplies two ray, rounding down (truncating) to the nearest ray
+   * @dev assembly optimized for improved gas savings
+   * @dev copied from aave-v3-origin: https://github.com/aave-dao/aave-v3-origin/blob/v3.6.0/src/contracts/protocol/libraries/math/WadRayMath.sol#L74-L83
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raymul b, rounded down
+   */
+  function rayMulFloor(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      // Overflow check: Ensure a * b does not exceed uint256 max
+      if iszero(or(iszero(b), iszero(gt(a, div(not(0), b))))) {
+        revert(0, 0)
+      }
+
+      c := div(mul(a, b), RAY)
+    }
+  }
+
+  /**
+   * @notice Multiplies two ray, rounding up to the nearest ray
+   * @dev assembly optimized for improved gas savings
+   * @dev copied from aave-v3-origin:https://github.com/aave-dao/aave-v3-origin/blob/v3.6.0/src/contracts/protocol/libraries/math/WadRayMath.sol#L85-L96
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raymul b, rounded up
+   */
+  function rayMulCeil(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      // Overflow check: Ensure a * b does not exceed uint256 max
+      if iszero(or(iszero(b), iszero(gt(a, div(not(0), b))))) {
+        revert(0, 0)
+      }
+
+      let product := mul(a, b)
+      c := add(div(product, RAY), iszero(iszero(mod(product, RAY))))
+    }
+  }
+
+  /**
    * @notice Divides two ray, rounding half up to the nearest ray
    * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
    * @param a Ray

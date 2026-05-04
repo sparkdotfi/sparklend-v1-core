@@ -502,7 +502,7 @@ makeSuite('Pool: FlashLoan', (testEnv: TestEnv) => {
     expect(totalLiquidityBefore.add(totalFees)).to.be.closeTo(totalLiquidityAfter, 2);
     expect(currentLiquidityRate).to.be.equal(0);
     expect(currentLiquidityIndex).to.be.equal(liquidityIndexBefore.add(liquidityIndexAdded));
-    expect(reservesAfter).to.be.equal(reservesBefore.add(feesToProtocol));
+    expect(reservesAfter).to.be.equal(reservesBefore.add(feesToProtocol).sub(1)); // Rounding
 
     // Check handleRepayment is correctly called at flash loans
     await expect(tx)
