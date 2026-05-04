@@ -89,7 +89,9 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     uint256 amount,
     uint256 index
   ) external virtual override onlyPool returns (bool) {
-    return _mintScaled(caller, onBehalfOf, amount, index);
+    uint256 amountScaled = amount.rayDivFloor(index);
+
+    return _mintScaled(caller, onBehalfOf, amount, amountScaled, index);
   }
 
   /// @inheritdoc IAToken
@@ -99,7 +101,9 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     uint256 amount,
     uint256 index
   ) external virtual override onlyPool {
-    _burnScaled(from, receiverOfUnderlying, amount, index);
+    uint256 amountScaled = amount.rayDivCeil(index);
+
+    _burnScaled(from, receiverOfUnderlying, amount, amountScaled, index);
     if (receiverOfUnderlying != address(this)) {
       IERC20(_underlyingAsset).safeTransfer(receiverOfUnderlying, amount);
     }
@@ -110,7 +114,10 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     if (amount == 0) {
       return;
     }
-    _mintScaled(address(POOL), _treasury, amount, index);
+
+    uint256 amountScaled = amount.rayDivFloor(index);
+
+    _mintScaled(address(POOL), _treasury, amount, amountScaled, index);
   }
 
   /// @inheritdoc IAToken
