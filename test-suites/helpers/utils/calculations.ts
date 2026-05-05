@@ -109,7 +109,11 @@ export const calcExpectedUserDataAfterWithdraw = (
     BigNumber.from(amountWithdrawn)
   );
 
-  expectedUserData.currentATokenBalance = aTokenBalance.sub(amountWithdrawn);
+  // Derive from the (clamped) scaled balance using the same rayMulFloor the contract's balanceOf
+  // uses, so the eq(0) check below picks the right usageAsCollateralEnabled branch.
+  expectedUserData.currentATokenBalance = expectedUserData.scaledATokenBalance.rayMulFloor(
+    reserveDataAfterAction.liquidityIndex
+  );
   expectedUserData.principalStableDebt = userDataBeforeAction.principalStableDebt;
   expectedUserData.scaledVariableDebt = userDataBeforeAction.scaledVariableDebt;
   expectedUserData.currentStableDebt = calcExpectedStableDebtTokenBalance(
@@ -170,7 +174,7 @@ export const calcExpectedReserveDataAfterDeposit = (
     reserveDataBeforeAction.symbol,
     reserveDataBeforeAction.marketStableRate,
     expectedReserveData.totalStableDebt,
-    expectedReserveData.totalVariableDebt,
+    calcRateInputTotalVariableDebt(expectedReserveData),
     expectedReserveData.averageStableBorrowRate,
     expectedReserveData.availableLiquidity,
     expectedReserveData.totalLiquidity
@@ -216,7 +220,7 @@ export const calcExpectedReserveDataAfterMintUnbacked = (
     reserveDataBeforeAction.symbol,
     reserveDataBeforeAction.marketStableRate,
     expectedReserveData.totalStableDebt,
-    expectedReserveData.totalVariableDebt,
+    calcRateInputTotalVariableDebt(expectedReserveData),
     expectedReserveData.averageStableBorrowRate,
     expectedReserveData.availableLiquidity,
     expectedReserveData.totalLiquidity
@@ -263,7 +267,7 @@ export const calcExpectedReserveDataAfterBackUnbacked = (
   const premiumToProtocol = feeBN.percentMul(protocolFeePercentage);
   const premiumToLP = feeBN.sub(premiumToProtocol);
 
-  const totalSupply = scaledATokenSupply.rayMul(expectedReserveData.liquidityIndex);
+  const totalSupply = scaledATokenSupply.rayMulFloor(expectedReserveData.liquidityIndex);
   // The fee is added directly to total liquidity, the backing will not change this liquidity.
   // We only update the liquidity index at the end, because it will otherwise influence computations midway
 
@@ -299,7 +303,7 @@ export const calcExpectedReserveDataAfterBackUnbacked = (
     reserveDataBeforeAction.symbol,
     reserveDataBeforeAction.marketStableRate,
     expectedReserveData.totalStableDebt,
-    expectedReserveData.totalVariableDebt,
+    calcRateInputTotalVariableDebt(expectedReserveData),
     expectedReserveData.averageStableBorrowRate,
     expectedReserveData.availableLiquidity,
     expectedReserveData.totalLiquidity
@@ -346,7 +350,7 @@ export const calcExpectedReserveDataAfterWithdraw = (
     reserveDataBeforeAction.symbol,
     reserveDataBeforeAction.marketStableRate,
     expectedReserveData.totalStableDebt,
-    expectedReserveData.totalVariableDebt,
+    calcRateInputTotalVariableDebt(expectedReserveData),
     expectedReserveData.averageStableBorrowRate,
     expectedReserveData.availableLiquidity,
     expectedReserveData.totalLiquidity
@@ -407,7 +411,7 @@ export const calcExpectedReserveDataAfterBorrow = (
       reserveDataBeforeAction.symbol,
       reserveDataBeforeAction.marketStableRate,
       expectedReserveData.principalStableDebt,
-      expectedReserveData.totalVariableDebt,
+      calcRateInputTotalVariableDebt(expectedReserveData),
       expectedReserveData.averageStableBorrowRate,
       expectedReserveData.availableLiquidity,
       expectedReserveData.totalLiquidity
@@ -424,7 +428,7 @@ export const calcExpectedReserveDataAfterBorrow = (
       currentTimestamp
     );
 
-    expectedReserveData.totalVariableDebt = reserveDataBeforeAction.scaledVariableDebt.rayMul(
+    expectedReserveData.totalVariableDebt = reserveDataBeforeAction.scaledVariableDebt.rayMulCeil(
       calcExpectedReserveNormalizedDebt(
         expectedReserveData.variableBorrowRate,
         expectedReserveData.variableBorrowIndex,
@@ -460,7 +464,7 @@ export const calcExpectedReserveDataAfterBorrow = (
     expectedReserveData.averageStableBorrowRate = reserveDataBeforeAction.averageStableBorrowRate;
 
     expectedReserveData.scaledVariableDebt = reserveDataBeforeAction.scaledVariableDebt.add(
-      amountBorrowedBN.rayDivFloor(expectedReserveData.variableBorrowIndex)
+      amountBorrowedBN.rayDivCeil(expectedReserveData.variableBorrowIndex)
     );
 
     const totalVariableDebtAfterTx = expectedReserveData.scaledVariableDebt.rayMul(
@@ -489,7 +493,7 @@ export const calcExpectedReserveDataAfterBorrow = (
     expectedReserveData.stableBorrowRate = rates[1];
     expectedReserveData.variableBorrowRate = rates[2];
 
-    expectedReserveData.totalVariableDebt = expectedReserveData.scaledVariableDebt.rayMul(
+    expectedReserveData.totalVariableDebt = expectedReserveData.scaledVariableDebt.rayMulCeil(
       calcExpectedReserveNormalizedDebt(
         expectedReserveData.variableBorrowRate,
         expectedReserveData.variableBorrowIndex,
@@ -594,9 +598,9 @@ export const calcExpectedReserveDataAfterRepay = (
     }
   } else {
     expectedReserveData.scaledVariableDebt = reserveDataBeforeAction.scaledVariableDebt.sub(
-      amountRepaidBN.rayDivCeil(expectedReserveData.variableBorrowIndex)
+      amountRepaidBN.rayDivFloor(expectedReserveData.variableBorrowIndex)
     );
-    expectedReserveData.totalVariableDebt = expectedReserveData.scaledVariableDebt.rayMul(
+    expectedReserveData.totalVariableDebt = expectedReserveData.scaledVariableDebt.rayMulCeil(
       expectedReserveData.variableBorrowIndex
     );
 
@@ -616,7 +620,7 @@ export const calcExpectedReserveDataAfterRepay = (
     reserveDataBeforeAction.symbol,
     reserveDataBeforeAction.marketStableRate,
     expectedReserveData.totalStableDebt,
-    expectedReserveData.totalVariableDebt,
+    calcRateInputTotalVariableDebt(expectedReserveData),
     expectedReserveData.averageStableBorrowRate,
     expectedReserveData.availableLiquidity,
     expectedReserveData.totalLiquidity
@@ -673,7 +677,7 @@ export const calcExpectedUserDataAfterBorrow = (
     expectedUserData.scaledVariableDebt = userDataBeforeAction.scaledVariableDebt;
   } else {
     expectedUserData.scaledVariableDebt = reserveDataBeforeAction.scaledVariableDebt.add(
-      amountBorrowedBN.rayDivFloor(expectedDataAfterAction.variableBorrowIndex)
+      amountBorrowedBN.rayDivCeil(expectedDataAfterAction.variableBorrowIndex)
     );
 
     expectedUserData.principalStableDebt = userDataBeforeAction.principalStableDebt;
@@ -766,9 +770,9 @@ export const calcExpectedUserDataAfterRepay = (
     expectedUserData.stableRateLastUpdated = userDataBeforeAction.stableRateLastUpdated;
 
     expectedUserData.scaledVariableDebt = userDataBeforeAction.scaledVariableDebt.sub(
-      totalRepaidBN.rayDivCeil(expectedDataAfterAction.variableBorrowIndex)
+      totalRepaidBN.rayDivFloor(expectedDataAfterAction.variableBorrowIndex)
     );
-    expectedUserData.currentVariableDebt = expectedUserData.scaledVariableDebt.rayMul(
+    expectedUserData.currentVariableDebt = expectedUserData.scaledVariableDebt.rayMulCeil(
       expectedDataAfterAction.variableBorrowIndex
     );
   }
@@ -845,10 +849,10 @@ export const calcExpectedReserveDataAfterSwapRateMode = (
   if (rateMode === RateMode.Stable) {
     //swap user stable debt to variable
     expectedReserveData.scaledVariableDebt = reserveDataBeforeAction.scaledVariableDebt.add(
-      stableDebt.rayDivFloor(expectedReserveData.variableBorrowIndex)
+      stableDebt.rayDivCeil(expectedReserveData.variableBorrowIndex)
     );
 
-    expectedReserveData.totalVariableDebt = expectedReserveData.scaledVariableDebt.rayMul(
+    expectedReserveData.totalVariableDebt = expectedReserveData.scaledVariableDebt.rayMulCeil(
       expectedReserveData.variableBorrowIndex
     );
 
@@ -867,10 +871,10 @@ export const calcExpectedReserveDataAfterSwapRateMode = (
       totalStableDebtUntilTx.add(variableDebt);
 
     expectedReserveData.scaledVariableDebt = reserveDataBeforeAction.scaledVariableDebt.sub(
-      variableDebt.rayDivCeil(expectedReserveData.variableBorrowIndex)
+      variableDebt.rayDivFloor(expectedReserveData.variableBorrowIndex)
     );
 
-    expectedReserveData.totalVariableDebt = expectedReserveData.scaledVariableDebt.rayMul(
+    expectedReserveData.totalVariableDebt = expectedReserveData.scaledVariableDebt.rayMulCeil(
       expectedReserveData.variableBorrowIndex
     );
 
@@ -893,7 +897,7 @@ export const calcExpectedReserveDataAfterSwapRateMode = (
     reserveDataBeforeAction.symbol,
     reserveDataBeforeAction.marketStableRate,
     expectedReserveData.totalStableDebt,
-    expectedReserveData.totalVariableDebt,
+    calcRateInputTotalVariableDebt(expectedReserveData),
     expectedReserveData.averageStableBorrowRate,
     expectedReserveData.availableLiquidity,
     expectedReserveData.totalLiquidity
@@ -943,9 +947,9 @@ export const calcExpectedUserDataAfterSwapRateMode = (
     expectedUserData.stableBorrowRate = BigNumber.from(0);
 
     expectedUserData.scaledVariableDebt = userDataBeforeAction.scaledVariableDebt.add(
-      stableDebtBalance.rayDivFloor(expectedDataAfterAction.variableBorrowIndex)
+      stableDebtBalance.rayDivCeil(expectedDataAfterAction.variableBorrowIndex)
     );
-    expectedUserData.currentVariableDebt = expectedUserData.scaledVariableDebt.rayMul(
+    expectedUserData.currentVariableDebt = expectedUserData.scaledVariableDebt.rayMulCeil(
       expectedDataAfterAction.variableBorrowIndex
     );
 
@@ -1034,7 +1038,7 @@ export const calcExpectedReserveDataAfterStableRateRebalance = (
     reserveDataBeforeAction.symbol,
     reserveDataBeforeAction.marketStableRate,
     expectedReserveData.totalStableDebt,
-    expectedReserveData.totalVariableDebt,
+    calcRateInputTotalVariableDebt(expectedReserveData),
     expectedReserveData.averageStableBorrowRate,
     expectedReserveData.availableLiquidity,
     expectedReserveData.totalLiquidity
@@ -1102,9 +1106,12 @@ const calcExpectedScaledATokenBalance = (
   amountAdded: BigNumber,
   amountTaken: BigNumber
 ) => {
-  return userDataBeforeAction.scaledATokenBalance
-    .add(amountAdded.rayDivFloor(index))
-    .sub(amountTaken.rayDivCeil(index));
+  // Mirror the contract's _burnScaled clamp: amountScaled cannot exceed the user's scaled balance.
+  const scaledAfterAdd = userDataBeforeAction.scaledATokenBalance.add(
+    amountAdded.rayDivFloor(index)
+  );
+  const scaledTaken = amountTaken.rayDivCeil(index);
+  return scaledTaken.gt(scaledAfterAdd) ? BigNumber.from(0) : scaledAfterAdd.sub(scaledTaken);
 };
 
 export const calcExpectedATokenBalance = (
@@ -1116,7 +1123,7 @@ export const calcExpectedATokenBalance = (
 
   const { scaledATokenBalance: scaledBalanceBeforeAction } = userData;
 
-  return scaledBalanceBeforeAction.rayMul(index);
+  return scaledBalanceBeforeAction.rayMulFloor(index);
 };
 
 const calcExpectedAverageStableBorrowRate = (
@@ -1163,7 +1170,7 @@ export const calcExpectedVariableDebtTokenBalance = (
 
   const { scaledVariableDebt } = userData;
 
-  return scaledVariableDebt.rayMul(normalizedDebt);
+  return scaledVariableDebt.rayMulCeil(normalizedDebt);
 };
 
 export const calcExpectedStableDebtTokenBalance = (
@@ -1470,7 +1477,14 @@ const calcExpectedTotalVariableDebt = (
   reserveData: ReserveData,
   expectedVariableDebtIndex: BigNumber
 ) => {
-  return reserveData.scaledVariableDebt.rayMul(expectedVariableDebtIndex);
+  return reserveData.scaledVariableDebt.rayMulCeil(expectedVariableDebtIndex);
+};
+
+// The contract's rate strategy uses plain rayMul (see ReserveLogic.updateInterestRates), while the
+// VariableDebtToken.totalSupply view uses rayMulCeil. Use this helper for any value passed into
+// calcExpectedInterestRates so it matches the on-chain rate input.
+const calcRateInputTotalVariableDebt = (reserveData: ReserveData): BigNumber => {
+  return reserveData.scaledVariableDebt.rayMul(reserveData.variableBorrowIndex);
 };
 
 const calcExpectedAccrueToTreasury = (reserveData: ReserveData, nextReserveData: ReserveData) => {

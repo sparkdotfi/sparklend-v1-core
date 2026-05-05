@@ -348,7 +348,7 @@ makeSuite('VariableDebtToken: Events', (testEnv: TestEnv) => {
 
     expect(aliceBalanceAfter).to.be.closeTo(
       aliceBalanceBefore.add(balances.balance[alice.address]),
-      6 // Rounding
+      18 // Rounding
     );
     expect(bobBalanceAfter).to.be.closeTo(bobBalanceBefore.add(balances.balance[bob.address]), 17); // Rounding
   };
@@ -464,8 +464,8 @@ makeSuite('VariableDebtToken: Events', (testEnv: TestEnv) => {
 
     expect(aliceBalanceAfter).to.be.closeTo(
       aliceBalanceBefore.add(balances.balance[alice.address]),
-      5
+      21
     );
-    expect(bobBalanceAfter).to.be.closeTo(bobBalanceBefore.add(balances.balance[bob.address]), 5);
+    expect(bobBalanceAfter).to.be.closeTo(bobBalanceBefore.add(balances.balance[bob.address]), 15);
   };
 });

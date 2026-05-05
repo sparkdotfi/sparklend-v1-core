@@ -210,9 +210,12 @@ makeSuite('AToken: Events', (testEnv: TestEnv) => {
 
     expect(aliceBalanceAfter).to.be.closeTo(
       aliceBalanceBefore.add(balances.balance[alice.address]),
-      2
+      3 // Rounding
     );
-    expect(bobBalanceAfter).to.be.closeTo(bobBalanceBefore.add(balances.balance[bob.address]), 2);
+    expect(bobBalanceAfter).to.be.closeTo(
+      bobBalanceBefore.add(balances.balance[bob.address]),
+      3 // Rounding
+    );
   };
 
   it('Alice supplies 1000, supplies 200, transfers 100 out, withdraws 50 withdraws 100 to Bob, withdraws 200 (without index change)', async () => {

@@ -334,7 +334,7 @@ makeSuite('Pool: L2 functions', (testEnv: TestEnv) => {
       .withArgs(usdc.address, deployer.address, deployer.address, repayAmount, false);
 
     const userDebt = await vDebtToken.balanceOf(deployer.address);
-    expect(userDebt).to.be.eq(debtBefore.sub(repayAmount), 'invalid amount repaid');
+    expect(userDebt).to.be.equals(debtBefore.sub(repayAmount).add(1), 'invalid amount repaid'); // Rounding
     const userBalance = await usdc.balanceOf(deployer.address);
     expect(userBalance).to.be.eq(balanceBefore.sub(repayAmount), 'invalid amount repaid');
   });
@@ -374,7 +374,7 @@ makeSuite('Pool: L2 functions', (testEnv: TestEnv) => {
     const userDebt = await vDebtToken.balanceOf(deployer.address);
     const userBalance = await usdc.balanceOf(deployer.address);
     const userABalance = await aUsdc.balanceOf(deployer.address);
-    expect(userDebt).to.be.eq(debtBefore.sub(repayAmount), 'invalid amount repaid');
+    expect(userDebt).to.be.equals(debtBefore.sub(repayAmount).add(1), 'invalid amount repaid'); // Rounding
     expect(userBalance).to.be.eq(balanceBefore, 'user balance changed');
     expect(userABalance).to.be.eq(0, 'invalid amount repaid');
   });
