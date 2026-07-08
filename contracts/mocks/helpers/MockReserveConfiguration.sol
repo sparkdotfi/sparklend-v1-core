@@ -1,167 +1,172 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
-import {ReserveConfiguration} from '../../protocol/libraries/configuration/ReserveConfiguration.sol';
-import {DataTypes} from '../../protocol/libraries/types/DataTypes.sol';
+import {
+    ReserveConfiguration
+} from '../../protocol/libraries/configuration/ReserveConfiguration.sol';
+
+import { ReserveConfigurationMap } from '../../protocol/libraries/types/DataTypes.sol';
 
 contract MockReserveConfiguration {
-  using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
 
-  DataTypes.ReserveConfigurationMap public configuration;
+    using ReserveConfiguration for ReserveConfigurationMap;
 
-  function setLtv(uint256 ltv) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setLtv(ltv);
-    configuration = config;
-  }
+    ReserveConfigurationMap public configuration;
 
-  function getLtv() external view returns (uint256) {
-    return configuration.getLtv();
-  }
+    function setLtv(uint256 ltv) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setLtv(ltv);
+        configuration = config;
+    }
 
-  function setLiquidationBonus(uint256 bonus) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setLiquidationBonus(bonus);
-    configuration = config;
-  }
+    function getLtv() external view returns (uint256) {
+        return configuration.getLtv();
+    }
 
-  function getLiquidationBonus() external view returns (uint256) {
-    return configuration.getLiquidationBonus();
-  }
+    function setLiquidationBonus(uint256 bonus) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setLiquidationBonus(bonus);
+        configuration = config;
+    }
 
-  function setLiquidationThreshold(uint256 threshold) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setLiquidationThreshold(threshold);
-    configuration = config;
-  }
+    function getLiquidationBonus() external view returns (uint256) {
+        return configuration.getLiquidationBonus();
+    }
 
-  function getLiquidationThreshold() external view returns (uint256) {
-    return configuration.getLiquidationThreshold();
-  }
+    function setLiquidationThreshold(uint256 threshold) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setLiquidationThreshold(threshold);
+        configuration = config;
+    }
 
-  function setDecimals(uint256 decimals) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setDecimals(decimals);
-    configuration = config;
-  }
+    function getLiquidationThreshold() external view returns (uint256) {
+        return configuration.getLiquidationThreshold();
+    }
 
-  function getDecimals() external view returns (uint256) {
-    return configuration.getDecimals();
-  }
+    function setDecimals(uint256 decimals) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setDecimals(decimals);
+        configuration = config;
+    }
 
-  function setFrozen(bool frozen) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setFrozen(frozen);
-    configuration = config;
-  }
+    function getDecimals() external view returns (uint256) {
+        return configuration.getDecimals();
+    }
 
-  function getFrozen() external view returns (bool) {
-    return configuration.getFrozen();
-  }
+    function setFrozen(bool frozen) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setFrozen(frozen);
+        configuration = config;
+    }
 
-  function setBorrowingEnabled(bool enabled) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setBorrowingEnabled(enabled);
-    configuration = config;
-  }
+    function getFrozen() external view returns (bool) {
+        return configuration.getFrozen();
+    }
 
-  function getBorrowingEnabled() external view returns (bool) {
-    return configuration.getBorrowingEnabled();
-  }
+    function setBorrowingEnabled(bool enabled) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setBorrowingEnabled(enabled);
+        configuration = config;
+    }
 
-  function setStableRateBorrowingEnabled(bool enabled) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setStableRateBorrowingEnabled(enabled);
-    configuration = config;
-  }
+    function getBorrowingEnabled() external view returns (bool) {
+        return configuration.getBorrowingEnabled();
+    }
 
-  function getStableRateBorrowingEnabled() external view returns (bool) {
-    return configuration.getStableRateBorrowingEnabled();
-  }
+    function setStableRateBorrowingEnabled(bool enabled) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setStableRateBorrowingEnabled(enabled);
+        configuration = config;
+    }
 
-  function setReserveFactor(uint256 reserveFactor) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setReserveFactor(reserveFactor);
-    configuration = config;
-  }
+    function getStableRateBorrowingEnabled() external view returns (bool) {
+        return configuration.getStableRateBorrowingEnabled();
+    }
 
-  function getReserveFactor() external view returns (uint256) {
-    return configuration.getReserveFactor();
-  }
+    function setReserveFactor(uint256 reserveFactor) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setReserveFactor(reserveFactor);
+        configuration = config;
+    }
 
-  function setBorrowCap(uint256 borrowCap) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setBorrowCap(borrowCap);
-    configuration = config;
-  }
+    function getReserveFactor() external view returns (uint256) {
+        return configuration.getReserveFactor();
+    }
 
-  function getBorrowCap() external view returns (uint256) {
-    return configuration.getBorrowCap();
-  }
+    function setBorrowCap(uint256 borrowCap) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setBorrowCap(borrowCap);
+        configuration = config;
+    }
 
-  function getEModeCategory() external view returns (uint256) {
-    return configuration.getEModeCategory();
-  }
+    function getBorrowCap() external view returns (uint256) {
+        return configuration.getBorrowCap();
+    }
 
-  function setEModeCategory(uint256 categoryId) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setEModeCategory(categoryId);
-    configuration = config;
-  }
+    function getEModeCategory() external view returns (uint256) {
+        return configuration.getEModeCategory();
+    }
 
-  function setFlashLoanEnabled(bool enabled) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setFlashLoanEnabled(enabled);
-    configuration = config;
-  }
+    function setEModeCategory(uint256 categoryId) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setEModeCategory(categoryId);
+        configuration = config;
+    }
 
-  function getFlashLoanEnabled() external view returns (bool) {
-    return configuration.getFlashLoanEnabled();
-  }
+    function setFlashLoanEnabled(bool enabled) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setFlashLoanEnabled(enabled);
+        configuration = config;
+    }
 
-  function setSupplyCap(uint256 supplyCap) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setSupplyCap(supplyCap);
-    configuration = config;
-  }
+    function getFlashLoanEnabled() external view returns (bool) {
+        return configuration.getFlashLoanEnabled();
+    }
 
-  function getSupplyCap() external view returns (uint256) {
-    return configuration.getSupplyCap();
-  }
+    function setSupplyCap(uint256 supplyCap) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setSupplyCap(supplyCap);
+        configuration = config;
+    }
 
-  function setLiquidationProtocolFee(uint256 liquidationProtocolFee) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setLiquidationProtocolFee(liquidationProtocolFee);
-    configuration = config;
-  }
+    function getSupplyCap() external view returns (uint256) {
+        return configuration.getSupplyCap();
+    }
 
-  function getLiquidationProtocolFee() external view returns (uint256) {
-    return configuration.getLiquidationProtocolFee();
-  }
+    function setLiquidationProtocolFee(uint256 liquidationProtocolFee) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setLiquidationProtocolFee(liquidationProtocolFee);
+        configuration = config;
+    }
 
-  function setUnbackedMintCap(uint256 unbackedMintCap) external {
-    DataTypes.ReserveConfigurationMap memory config = configuration;
-    config.setUnbackedMintCap(unbackedMintCap);
-    configuration = config;
-  }
+    function getLiquidationProtocolFee() external view returns (uint256) {
+        return configuration.getLiquidationProtocolFee();
+    }
 
-  function getUnbackedMintCap() external view returns (uint256) {
-    return configuration.getUnbackedMintCap();
-  }
+    function setUnbackedMintCap(uint256 unbackedMintCap) external {
+        ReserveConfigurationMap memory config = configuration;
+        config.setUnbackedMintCap(unbackedMintCap);
+        configuration = config;
+    }
 
-  function getFlags() external view returns (bool, bool, bool, bool, bool) {
-    return configuration.getFlags();
-  }
+    function getUnbackedMintCap() external view returns (uint256) {
+        return configuration.getUnbackedMintCap();
+    }
 
-  function getParams()
-    external
-    view
-    returns (uint256, uint256, uint256, uint256, uint256, uint256)
-  {
-    return configuration.getParams();
-  }
+    function getFlags() external view returns (bool, bool, bool, bool, bool) {
+        return configuration.getFlags();
+    }
 
-  function getCaps() external view returns (uint256, uint256) {
-    return configuration.getCaps();
-  }
+    function getParams()
+        external
+        view
+        returns (uint256, uint256, uint256, uint256, uint256, uint256)
+    {
+        return configuration.getParams();
+    }
+
+    function getCaps() external view returns (uint256, uint256) {
+        return configuration.getCaps();
+    }
+
 }

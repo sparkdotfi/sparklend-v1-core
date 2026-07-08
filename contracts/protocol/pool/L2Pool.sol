@@ -2,7 +2,6 @@
 pragma solidity ^0.8.10;
 
 import {Pool} from './Pool.sol';
-import {IPoolAddressesProvider} from '../../interfaces/IPoolAddressesProvider.sol';
 import {IL2Pool} from '../../interfaces/IL2Pool.sol';
 import {CalldataLogic} from '../libraries/logic/CalldataLogic.sol';
 
@@ -17,7 +16,7 @@ contract L2Pool is Pool, IL2Pool {
    * @dev Constructor.
    * @param provider The address of the PoolAddressesProvider contract
    */
-  constructor(IPoolAddressesProvider provider) Pool(provider) {
+  constructor(address provider) Pool(provider) {
     // Intentionally left blank
   }
 

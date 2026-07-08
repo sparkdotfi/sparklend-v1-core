@@ -1,239 +1,264 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.10;
 
-import {GPv2SafeERC20} from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
-import {SafeCast} from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
-import {IERC20} from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
-import {IAToken} from '../../../interfaces/IAToken.sol';
-import {IPool} from '../../../interfaces/IPool.sol';
-import {IFlashLoanReceiver} from '../../../flashloan/interfaces/IFlashLoanReceiver.sol';
-import {IFlashLoanSimpleReceiver} from '../../../flashloan/interfaces/IFlashLoanSimpleReceiver.sol';
-import {IPoolAddressesProvider} from '../../../interfaces/IPoolAddressesProvider.sol';
-import {UserConfiguration} from '../configuration/UserConfiguration.sol';
-import {ReserveConfiguration} from '../configuration/ReserveConfiguration.sol';
-import {Errors} from '../helpers/Errors.sol';
-import {WadRayMath} from '../math/WadRayMath.sol';
-import {PercentageMath} from '../math/PercentageMath.sol';
-import {DataTypes} from '../types/DataTypes.sol';
-import {ValidationLogic} from './ValidationLogic.sol';
-import {BorrowLogic} from './BorrowLogic.sol';
-import {ReserveLogic} from './ReserveLogic.sol';
+import { GPv2SafeERC20 }          from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
+import { SafeCast }               from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
+import { IERC20 }                 from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
+import { IAToken }                from '../../../interfaces/IAToken.sol';
+import { IPool }                  from '../../../interfaces/IPool.sol';
+import { IFlashLoanReceiver }     from '../../../flashloan/interfaces/IFlashLoanReceiver.sol';
+import { IPoolAddressesProvider } from '../../../interfaces/IPoolAddressesProvider.sol';
+import { UserConfiguration }      from '../configuration/UserConfiguration.sol';
+import { ReserveConfiguration }   from '../configuration/ReserveConfiguration.sol';
+import { Errors }                 from '../helpers/Errors.sol';
+import { WadRayMath }             from '../math/WadRayMath.sol';
+import { PercentageMath }         from '../math/PercentageMath.sol';
+
+import {
+    IFlashLoanSimpleReceiver
+} from '../../../flashloan/interfaces/IFlashLoanSimpleReceiver.sol';
+
+import {
+    EModeCategory,
+    FlashloanParams,
+    FlashLoanRepaymentParams,
+    FlashloanSimpleParams,
+    InterestRateMode,
+    ReserveCache,
+    ReserveConfigurationMap,
+    ReserveData,
+    UserConfigurationMap
+} from '../types/DataTypes.sol';
+
+import { ValidationLogic } from './ValidationLogic.sol';
+import { BorrowLogic }     from './BorrowLogic.sol';
+import { ReserveLogic }    from './ReserveLogic.sol';
 
 /**
- * @title FlashLoanLogic library
+ * @title  FlashLoanLogic library
  * @author Aave
  * @notice Implements the logic for the flash loans
  */
 library FlashLoanLogic {
-  using ReserveLogic for DataTypes.ReserveCache;
-  using ReserveLogic for DataTypes.ReserveData;
-  using GPv2SafeERC20 for IERC20;
-  using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
-  using WadRayMath for uint256;
-  using PercentageMath for uint256;
-  using SafeCast for uint256;
 
-  // See `IPool` for descriptions
-  event FlashLoan(
-    address indexed target,
-    address initiator,
-    address indexed asset,
-    uint256 amount,
-    DataTypes.InterestRateMode interestRateMode,
-    uint256 premium,
-    uint16 indexed referralCode
-  );
+    using ReserveLogic         for ReserveCache;
+    using ReserveLogic         for ReserveData;
+    using GPv2SafeERC20        for IERC20;
+    using ReserveConfiguration for ReserveConfigurationMap;
+    using WadRayMath           for uint256;
+    using PercentageMath       for uint256;
+    using SafeCast             for uint256;
 
-  // Helper struct for internal variables used in the `executeFlashLoan` function
-  struct FlashLoanLocalVars {
-    IFlashLoanReceiver receiver;
-    uint256 i;
-    address currentAsset;
-    uint256 currentAmount;
-    uint256[] totalPremiums;
-    uint256 flashloanPremiumTotal;
-    uint256 flashloanPremiumToProtocol;
-  }
-
-  /**
-   * @notice Implements the flashloan feature that allow users to access liquidity of the pool for one transaction
-   * as long as the amount taken plus fee is returned or debt is opened.
-   * @dev For authorized flashborrowers the fee is waived
-   * @dev At the end of the transaction the pool will pull amount borrowed + fee from the receiver,
-   * if the receiver have not approved the pool the transaction will revert.
-   * @dev Emits the `FlashLoan()` event
-   * @param reservesData The state of all the reserves
-   * @param reservesList The addresses of all the active reserves
-   * @param eModeCategories The configuration of all the efficiency mode categories
-   * @param userConfig The user configuration mapping that tracks the supplied/borrowed assets
-   * @param params The additional parameters needed to execute the flashloan function
-   */
-  function executeFlashLoan(
-    mapping(address => DataTypes.ReserveData) storage reservesData,
-    mapping(uint256 => address) storage reservesList,
-    mapping(uint8 => DataTypes.EModeCategory) storage eModeCategories,
-    DataTypes.UserConfigurationMap storage userConfig,
-    DataTypes.FlashloanParams memory params
-  ) external {
-    // The usual action flow (cache -> updateState -> validation -> changeState -> updateRates)
-    // is altered to (validation -> user payload -> cache -> updateState -> changeState -> updateRates) for flashloans.
-    // This is done to protect against reentrance and rate manipulation within the user specified payload.
-
-    ValidationLogic.validateFlashloan(reservesData, params.assets, params.amounts);
-
-    FlashLoanLocalVars memory vars;
-
-    vars.totalPremiums = new uint256[](params.assets.length);
-
-    vars.receiver = IFlashLoanReceiver(params.receiverAddress);
-    (vars.flashloanPremiumTotal, vars.flashloanPremiumToProtocol) = params.isAuthorizedFlashBorrower
-      ? (0, 0)
-      : (params.flashLoanPremiumTotal, params.flashLoanPremiumToProtocol);
-
-    for (vars.i = 0; vars.i < params.assets.length; vars.i++) {
-      vars.currentAmount = params.amounts[vars.i];
-      vars.totalPremiums[vars.i] = DataTypes.InterestRateMode(params.interestRateModes[vars.i]) ==
-        DataTypes.InterestRateMode.NONE
-        ? vars.currentAmount.percentMul(vars.flashloanPremiumTotal)
-        : 0;
-      IAToken(reservesData[params.assets[vars.i]].aTokenAddress).transferUnderlyingTo(
-        params.receiverAddress,
-        vars.currentAmount
-      );
-    }
-
-    require(
-      vars.receiver.executeOperation(
-        params.assets,
-        params.amounts,
-        vars.totalPremiums,
-        msg.sender,
-        params.params
-      ),
-      Errors.INVALID_FLASHLOAN_EXECUTOR_RETURN
+    // See `IPool` for descriptions
+    event FlashLoan(
+        address          indexed target,
+        address                  initiator,
+        address          indexed asset,
+        uint256                  amount,
+        InterestRateMode         interestRateMode,
+        uint256                  premium,
+        uint16           indexed referralCode
     );
 
-    for (vars.i = 0; vars.i < params.assets.length; vars.i++) {
-      vars.currentAsset = params.assets[vars.i];
-      vars.currentAmount = params.amounts[vars.i];
+    // Helper struct for internal variables used in the `executeFlashLoan` function
+    struct FlashLoanLocalVars {
+        IFlashLoanReceiver receiver;
+        uint256            i;
+        address            currentAsset;
+        uint256            currentAmount;
+        uint256[]          totalPremiums;
+        uint256            premiumTotal;
+        uint256            premiumToProtocol;
+    }
 
-      if (
-        DataTypes.InterestRateMode(params.interestRateModes[vars.i]) ==
-        DataTypes.InterestRateMode.NONE
-      ) {
-        _handleFlashLoanRepayment(
-          reservesData[vars.currentAsset],
-          DataTypes.FlashLoanRepaymentParams({
-            asset: vars.currentAsset,
-            receiverAddress: params.receiverAddress,
-            amount: vars.currentAmount,
-            totalPremium: vars.totalPremiums[vars.i],
-            flashLoanPremiumToProtocol: vars.flashloanPremiumToProtocol,
-            referralCode: params.referralCode
-          })
+    /**
+     * @notice Implements the flashloan feature that allow users to access liquidity of the pool for
+     *         one transaction as long as the amount taken plus fee is returned or debt is opened.
+     * @dev    For authorized flashborrowers the fee is waived
+     * @dev    At the end of the transaction the pool will pull amount borrowed + fee from the
+     *         receiver, if the receiver have not approved the pool the transaction will revert.
+     * @dev    Emits the `FlashLoan()` event
+     * @param  reservesData    The state of all the reserves
+     * @param  reservesList    The addresses of all the active reserves
+     * @param  eModeCategories The configuration of all the efficiency mode categories
+     * @param  userConfig      The user configuration mapping that tracks the supplied/borrowed
+     *                         assets
+     * @param  params          The additional parameters needed to execute the flashloan function
+     */
+    function executeFlashLoan(
+        mapping (address => ReserveData) storage reservesData,
+        mapping (uint256 => address)     storage reservesList,
+        mapping (uint8 => EModeCategory) storage eModeCategories,
+        UserConfigurationMap             storage userConfig,
+        FlashloanParams                  memory  params
+    ) external {
+        // For flashloans, the usual action flow
+        // (cache -> updateState -> validation -> changeState -> updateRates)
+        // is altered to
+        // (validation -> user payload -> cache -> updateState -> changeState -> updateRates)
+        // to protect against reentrance and rate manipulation within the user specified payload.
+
+        ValidationLogic.validateFlashloan(reservesData, params.assets, params.amounts);
+
+        FlashLoanLocalVars memory vars;
+
+        vars.totalPremiums = new uint256[](params.assets.length);
+
+        vars.receiver = IFlashLoanReceiver(params.recipient);
+
+        ( vars.premiumTotal, vars.premiumToProtocol ) =
+            params.isAuthorizedFlashBorrower
+                ? ( 0, 0 )
+                : ( params.premiumTotal, params.premiumToProtocol );
+
+        for (vars.i = 0; vars.i < params.assets.length; vars.i++) {
+            vars.currentAmount = params.amounts[vars.i];
+
+            vars.totalPremiums[vars.i] =
+                params.interestRateModes[vars.i] == uint8(InterestRateMode.NONE)
+                    ? vars.currentAmount.percentMul(vars.premiumTotal)
+                    : 0;
+
+            IAToken(reservesData[params.assets[vars.i]].aToken)
+                .transferUnderlyingTo(params.recipient, vars.currentAmount);
+        }
+
+        require(
+            vars.receiver.executeOperation(
+                params.assets,
+                params.amounts,
+                vars.totalPremiums,
+                msg.sender,
+                params.params
+            ),
+            Errors.INVALID_FLASHLOAN_EXECUTOR_RETURN
         );
-      } else {
-        revert('FLASHLOAN_INTO_BORROW_DEPRECATED');
-      }
+
+        for (vars.i = 0; vars.i < params.assets.length; vars.i++) {
+            vars.currentAsset  = params.assets[vars.i];
+            vars.currentAmount = params.amounts[vars.i];
+
+            if (params.interestRateModes[vars.i] != uint8(InterestRateMode.NONE)) {
+                revert('FLASHLOAN_INTO_BORROW_DEPRECATED');
+            }
+
+            _handleFlashLoanRepayment(
+                reservesData[vars.currentAsset],
+                FlashLoanRepaymentParams({
+                    asset             : vars.currentAsset,
+                    recipient         : params.recipient,
+                    amount            : vars.currentAmount,
+                    totalPremium      : vars.totalPremiums[vars.i],
+                    premiumToProtocol : vars.premiumToProtocol,
+                    referralCode      : params.referralCode
+                })
+            );
+        }
     }
-  }
 
-  /**
-   * @notice Implements the simple flashloan feature that allow users to access liquidity of ONE reserve for one
-   * transaction as long as the amount taken plus fee is returned.
-   * @dev Does not waive fee for approved flashborrowers nor allow taking on debt instead of repaying to save gas
-   * @dev At the end of the transaction the pool will pull amount borrowed + fee from the receiver,
-   * if the receiver have not approved the pool the transaction will revert.
-   * @dev Emits the `FlashLoan()` event
-   * @param reserve The state of the flashloaned reserve
-   * @param params The additional parameters needed to execute the simple flashloan function
-   */
-  function executeFlashLoanSimple(
-    DataTypes.ReserveData storage reserve,
-    DataTypes.FlashloanSimpleParams memory params
-  ) external {
-    // The usual action flow (cache -> updateState -> validation -> changeState -> updateRates)
-    // is altered to (validation -> user payload -> cache -> updateState -> changeState -> updateRates) for flashloans.
-    // This is done to protect against reentrance and rate manipulation within the user specified payload.
+    /**
+     * @notice Implements the simple flashloan feature that allow users to access liquidity of ONE
+     *         reserve for one transaction as long as the amount taken plus fee is returned.
+     * @dev    Does not waive fee for approved flashborrowers nor allow taking on debt instead of
+     *         repaying to save gas
+     * @dev    At the end of the transaction the pool will pull amount borrowed + fee from the
+     *         receiver, if the receiver have not approved the pool the transaction will revert.
+     * @dev    Emits the `FlashLoan()` event
+     * @param  reserve The state of the flashloaned reserve
+     * @param  params  The additional parameters needed to execute the simple flashloan function
+     */
+    function executeFlashLoanSimple(
+        ReserveData           storage reserve,
+        FlashloanSimpleParams memory  params
+    ) external {
+        // For flashloans, the usual action flow
+        // (cache -> updateState -> validation -> changeState -> updateRates)
+        // is altered to
+        // (validation -> user payload -> cache -> updateState -> changeState -> updateRates)
+        // to protect against reentrance and rate manipulation within the user specified payload.
 
-    ValidationLogic.validateFlashloanSimple(reserve);
+        ValidationLogic.validateFlashloanSimple(reserve);
 
-    IFlashLoanSimpleReceiver receiver = IFlashLoanSimpleReceiver(params.receiverAddress);
-    uint256 totalPremium = params.amount.percentMul(params.flashLoanPremiumTotal);
-    IAToken(reserve.aTokenAddress).transferUnderlyingTo(params.receiverAddress, params.amount);
+        uint256 totalPremium = params.amount.percentMul(params.premiumTotal);
 
-    require(
-      receiver.executeOperation(
-        params.asset,
-        params.amount,
-        totalPremium,
-        msg.sender,
-        params.params
-      ),
-      Errors.INVALID_FLASHLOAN_EXECUTOR_RETURN
-    );
+        IAToken(reserve.aToken).transferUnderlyingTo(params.recipient, params.amount);
 
-    _handleFlashLoanRepayment(
-      reserve,
-      DataTypes.FlashLoanRepaymentParams({
-        asset: params.asset,
-        receiverAddress: params.receiverAddress,
-        amount: params.amount,
-        totalPremium: totalPremium,
-        flashLoanPremiumToProtocol: params.flashLoanPremiumToProtocol,
-        referralCode: params.referralCode
-      })
-    );
-  }
+        require(
+            IFlashLoanSimpleReceiver(params.recipient)
+                .executeOperation(
+                    params.asset,
+                    params.amount,
+                    totalPremium,
+                    msg.sender,
+                    params.params
+            ),
+            Errors.INVALID_FLASHLOAN_EXECUTOR_RETURN
+        );
 
-  /**
-   * @notice Handles repayment of flashloaned assets + premium
-   * @dev Will pull the amount + premium from the receiver, so must have approved pool
-   * @param reserve The state of the flashloaned reserve
-   * @param params The additional parameters needed to execute the repayment function
-   */
-  function _handleFlashLoanRepayment(
-    DataTypes.ReserveData storage reserve,
-    DataTypes.FlashLoanRepaymentParams memory params
-  ) internal {
-    uint256 premiumToProtocol = params.totalPremium.percentMul(params.flashLoanPremiumToProtocol);
-    uint256 premiumToLP = params.totalPremium - premiumToProtocol;
-    uint256 amountPlusPremium = params.amount + params.totalPremium;
+        _handleFlashLoanRepayment(
+            reserve,
+            FlashLoanRepaymentParams({
+                asset             : params.asset,
+                recipient         : params.recipient,
+                amount            : params.amount,
+                totalPremium      : totalPremium,
+                premiumToProtocol : params.premiumToProtocol,
+                referralCode      : params.referralCode
+            })
+        );
+    }
 
-    DataTypes.ReserveCache memory reserveCache = reserve.cache();
-    reserve.updateState(reserveCache);
-    reserveCache.nextLiquidityIndex = reserve.cumulateToLiquidityIndex(
-      IERC20(reserveCache.aTokenAddress).totalSupply() +
-        uint256(reserve.accruedToTreasury).rayMul(reserveCache.nextLiquidityIndex),
-      premiumToLP
-    );
+    /**
+     * @notice Handles repayment of flashloaned assets + premium
+     * @dev    Will pull the amount + premium from the receiver, so must have approved pool
+     * @param  reserve The state of the flashloaned reserve
+     * @param  params  The additional parameters needed to execute the repayment function
+     */
+    function _handleFlashLoanRepayment(
+        ReserveData              storage reserve,
+        FlashLoanRepaymentParams memory  params
+    ) internal {
+        uint256 premiumToProtocol = params.totalPremium.percentMul(params.premiumToProtocol);
+        uint256 premiumToLP       = params.totalPremium - premiumToProtocol;
+        uint256 amountPlusPremium = params.amount + params.totalPremium;
 
-    reserve.accruedToTreasury += premiumToProtocol
-      .rayDiv(reserveCache.nextLiquidityIndex)
-      .toUint128();
+        ReserveCache memory reserveCache = reserve.cache();
 
-    reserve.updateInterestRates(reserveCache, params.asset, amountPlusPremium, 0);
+        reserve.updateState(reserveCache);
 
-    IERC20(params.asset).safeTransferFrom(
-      params.receiverAddress,
-      reserveCache.aTokenAddress,
-      amountPlusPremium
-    );
+        reserveCache.nextLiquidityIndex =
+            reserve.cumulateToLiquidityIndex(
+                IERC20(reserveCache.aToken).totalSupply() +
+                uint256(reserve.accruedToTreasury).rayMul(reserveCache.nextLiquidityIndex),
+                premiumToLP
+            );
 
-    IAToken(reserveCache.aTokenAddress).handleRepayment(
-      params.receiverAddress,
-      params.receiverAddress,
-      amountPlusPremium
-    );
+        reserve.accruedToTreasury +=
+            premiumToProtocol.rayDiv(reserveCache.nextLiquidityIndex).toUint128();
 
-    emit FlashLoan(
-      params.receiverAddress,
-      msg.sender,
-      params.asset,
-      params.amount,
-      DataTypes.InterestRateMode(0),
-      params.totalPremium,
-      params.referralCode
-    );
-  }
+        reserve.updateInterestRates(reserveCache, params.asset, amountPlusPremium, 0);
+
+        IERC20(params.asset).safeTransferFrom(
+            params.recipient,
+            reserveCache.aToken,
+            amountPlusPremium
+        );
+
+        IAToken(reserveCache.aToken).handleRepayment(
+            params.recipient,
+            params.recipient,
+            amountPlusPremium
+        );
+
+        emit FlashLoan(
+            params.recipient,
+            msg.sender,
+            params.asset,
+            params.amount,
+            InterestRateMode(0),
+            params.totalPremium,
+            params.referralCode
+        );
+    }
+
 }

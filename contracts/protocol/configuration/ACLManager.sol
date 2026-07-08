@@ -11,7 +11,7 @@ import {Errors} from '../libraries/helpers/Errors.sol';
  * @author Aave
  * @notice Access Control List Manager. Main registry of system roles and permissions.
  */
-contract ACLManager is AccessControl, IACLManager {
+contract ACLManager is IACLManager, AccessControl {
   bytes32 public constant override POOL_ADMIN_ROLE = keccak256('POOL_ADMIN');
   bytes32 public constant override EMERGENCY_ADMIN_ROLE = keccak256('EMERGENCY_ADMIN');
   bytes32 public constant override RISK_ADMIN_ROLE = keccak256('RISK_ADMIN');
@@ -19,16 +19,16 @@ contract ACLManager is AccessControl, IACLManager {
   bytes32 public constant override BRIDGE_ROLE = keccak256('BRIDGE');
   bytes32 public constant override ASSET_LISTING_ADMIN_ROLE = keccak256('ASSET_LISTING_ADMIN');
 
-  IPoolAddressesProvider public immutable ADDRESSES_PROVIDER;
+  address public immutable ADDRESSES_PROVIDER;
 
   /**
    * @dev Constructor
    * @dev The ACL admin should be initialized at the addressesProvider beforehand
    * @param provider The address of the PoolAddressesProvider
    */
-  constructor(IPoolAddressesProvider provider) {
+  constructor(address provider) {
     ADDRESSES_PROVIDER = provider;
-    address aclAdmin = provider.getACLAdmin();
+    address aclAdmin = IPoolAddressesProvider(provider).getACLAdmin();
     require(aclAdmin != address(0), Errors.ACL_ADMIN_CANNOT_BE_ZERO);
     _setupRole(DEFAULT_ADMIN_ROLE, aclAdmin);
   }

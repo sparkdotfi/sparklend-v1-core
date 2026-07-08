@@ -1,74 +1,82 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
-import {SafeMath} from '../../dependencies/openzeppelin/contracts/SafeMath.sol';
-import {IERC20} from '../../dependencies/openzeppelin/contracts/IERC20.sol';
-import {GPv2SafeERC20} from '../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
-import {SafeMath} from '../../dependencies/openzeppelin/contracts/SafeMath.sol';
-import {IPoolAddressesProvider} from '../../interfaces/IPoolAddressesProvider.sol';
-import {FlashLoanSimpleReceiverBase} from '../../flashloan/base/FlashLoanSimpleReceiverBase.sol';
-import {MintableERC20} from '../tokens/MintableERC20.sol';
+import { SafeMath }      from '../../dependencies/openzeppelin/contracts/SafeMath.sol';
+import { IERC20 }        from '../../dependencies/openzeppelin/contracts/IERC20.sol';
+import { GPv2SafeERC20 } from '../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
+import { SafeMath }      from '../../dependencies/openzeppelin/contracts/SafeMath.sol';
+
+import { IPoolAddressesProvider }      from '../../interfaces/IPoolAddressesProvider.sol';
+import { FlashLoanSimpleReceiverBase } from '../../flashloan/base/FlashLoanSimpleReceiverBase.sol';
+import { MintableERC20 }               from '../tokens/MintableERC20.sol';
 
 contract MockFlashLoanSimpleReceiver is FlashLoanSimpleReceiverBase {
-  using GPv2SafeERC20 for IERC20;
-  using SafeMath for uint256;
 
-  event ExecutedWithFail(address asset, uint256 amount, uint256 premium);
-  event ExecutedWithSuccess(address asset, uint256 amount, uint256 premium);
+    using GPv2SafeERC20 for IERC20;
+    using SafeMath      for uint256;
 
-  bool internal _failExecution;
-  uint256 internal _amountToApprove;
-  bool internal _simulateEOA;
+    event ExecutedWithFail(address asset, uint256 amount, uint256 premium);
 
-  constructor(IPoolAddressesProvider provider) FlashLoanSimpleReceiverBase(provider) {}
+    event ExecutedWithSuccess(address asset, uint256 amount, uint256 premium);
 
-  function setFailExecutionTransfer(bool fail) public {
-    _failExecution = fail;
-  }
+    bool internal _failExecution;
 
-  function setAmountToApprove(uint256 amountToApprove) public {
-    _amountToApprove = amountToApprove;
-  }
+    uint256 internal _amountToApprove;
 
-  function setSimulateEOA(bool flag) public {
-    _simulateEOA = flag;
-  }
+    bool internal _simulateEOA;
 
-  function getAmountToApprove() public view returns (uint256) {
-    return _amountToApprove;
-  }
+    constructor(address provider) FlashLoanSimpleReceiverBase(provider) {}
 
-  function simulateEOA() public view returns (bool) {
-    return _simulateEOA;
-  }
-
-  function executeOperation(
-    address asset,
-    uint256 amount,
-    uint256 premium,
-    address, // initiator
-    bytes memory // params
-  ) public override returns (bool) {
-    if (_failExecution) {
-      emit ExecutedWithFail(asset, amount, premium);
-      return !_simulateEOA;
+    function setFailExecutionTransfer(bool fail) public {
+        _failExecution = fail;
     }
 
-    //mint to this contract the specific amount
-    MintableERC20 token = MintableERC20(asset);
+    function setAmountToApprove(uint256 amountToApprove) public {
+        _amountToApprove = amountToApprove;
+    }
 
-    //check the contract has the specified balance
-    require(amount <= IERC20(asset).balanceOf(address(this)), 'Invalid balance for the contract');
+    function setSimulateEOA(bool flag) public {
+        _simulateEOA = flag;
+    }
 
-    uint256 amountToReturn = (_amountToApprove != 0) ? _amountToApprove : amount.add(premium);
-    //execution does not fail - mint tokens and return them to the _destination
+    function getAmountToApprove() public view returns (uint256) {
+        return _amountToApprove;
+    }
 
-    token.mint(premium);
+    function simulateEOA() public view returns (bool) {
+        return _simulateEOA;
+    }
 
-    IERC20(asset).approve(address(POOL), amountToReturn);
+    function executeOperation(
+        address        asset,
+        uint256        amount,
+        uint256        premium,
+        address, // initiator
+        bytes   memory // params
+    ) public override returns (bool) {
+        if (_failExecution) {
+            emit ExecutedWithFail(asset, amount, premium);
 
-    emit ExecutedWithSuccess(asset, amount, premium);
+            return !_simulateEOA;
+        }
 
-    return true;
-  }
+        // check the contract has the specified balance
+        require(
+            amount <= IERC20(asset).balanceOf(address(this)),
+            'Invalid balance for the contract'
+        );
+
+        uint256 amountToReturn = (_amountToApprove != 0) ? _amountToApprove : amount.add(premium);
+        // execution does not fail - mint tokens and return them to the _destination
+
+        // mint to this contract the specific amount
+        MintableERC20(asset).mint(premium);
+
+        IERC20(asset).approve(address(POOL), amountToReturn);
+
+        emit ExecutedWithSuccess(asset, amount, premium);
+
+        return true;
+    }
+
 }

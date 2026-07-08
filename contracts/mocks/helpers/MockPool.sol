@@ -1,53 +1,57 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.0;
 
-import {IPoolAddressesProvider} from '../../interfaces/IPoolAddressesProvider.sol';
-
-contract MockPool {
-  // Reserved storage space to avoid layout collisions.
-  uint256[100] private ______gap;
-
-  address internal _addressesProvider;
-  address[] internal _reserveList;
-
-  function initialize(address provider) external {
-    _addressesProvider = provider;
-  }
-
-  function addReserveToReservesList(address reserve) external {
-    _reserveList.push(reserve);
-  }
-
-  function getReservesList() external view returns (address[] memory) {
-    address[] memory reservesList = new address[](_reserveList.length);
-    for (uint256 i; i < _reserveList.length; i++) {
-      reservesList[i] = _reserveList[i];
-    }
-    return reservesList;
-  }
-}
-
 import {Pool} from '../../protocol/pool/Pool.sol';
 
+contract MockPool {
+
+    // Reserved storage space to avoid layout collisions.
+    uint256[100] private ______gap;
+
+    address internal _addressesProvider;
+
+    address[] internal _reserveList;
+
+    function initialize(address provider) external {
+        _addressesProvider = provider;
+    }
+
+    function addReserveToReservesList(address reserve) external {
+        _reserveList.push(reserve);
+    }
+
+    function getReservesList() external view returns (address[] memory reservesList) {
+        reservesList = new address[](_reserveList.length);
+
+        for (uint256 i; i < _reserveList.length; i++) {
+            reservesList[i] = _reserveList[i];
+        }
+    }
+
+}
+
 contract MockPoolInherited is Pool {
-  uint16 internal _maxNumberOfReserves = 128;
 
-  function getRevision() internal pure override returns (uint256) {
-    return 0x3;
-  }
+    uint16 internal _maxNumberOfReserves = 128;
 
-  constructor(IPoolAddressesProvider provider) Pool(provider) {}
+    function getRevision() internal pure override returns (uint256) {
+        return 0x3;
+    }
 
-  function setMaxNumberOfReserves(uint16 newMaxNumberOfReserves) public {
-    _maxNumberOfReserves = newMaxNumberOfReserves;
-  }
+    constructor(address provider) Pool(provider) {}
 
-  function MAX_NUMBER_RESERVES() public view override returns (uint16) {
-    return _maxNumberOfReserves;
-  }
+    function setMaxNumberOfReserves(uint16 max) public {
+        _maxNumberOfReserves = max;
+    }
 
-  function dropReserve(address asset) external override {
-    _reservesList[_reserves[asset].id] = address(0);
-    delete _reserves[asset];
-  }
+    function MAX_NUMBER_RESERVES() public view override returns (uint16) {
+        return _maxNumberOfReserves;
+    }
+
+    function dropReserve(address asset) external override {
+        _reservesList[_reserves[asset].id] = address(0);
+
+        delete _reserves[asset];
+    }
+
 }

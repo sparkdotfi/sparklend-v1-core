@@ -10,3 +10,4 @@ Certora
 CHANGELOG.md
 .prettierignore
 .solcover.js
+*.sol

@@ -1,0 +1,3 @@
+- ReserveLogic.updateState updates reserve.lastUpdateTimestamp without updating reserveCache.reserveLastUpdateTimestamp, and yet reserveCache.reserveLastUpdateTimestamp is used in accrueToTreasury and updateIndexes
+- reserve.accruedToTreasury is updated in accrueToTreasury but such a property does not exist in cache, so ValidationLogic.validateSupply needs reserve and does a storage lookup when it could have relied on reserveCache
+-

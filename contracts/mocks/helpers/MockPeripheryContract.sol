@@ -2,41 +2,45 @@
 pragma solidity ^0.8.0;
 
 contract MockPeripheryContractV1 {
-  address private _manager;
-  uint256 private _value;
 
-  function initialize(address manager, uint256 value) external {
-    _manager = manager;
-    _value = value;
-  }
+    address private _manager;
+    uint256 private _value;
 
-  function getManager() external view returns (address) {
-    return _manager;
-  }
+    function initialize(address manager, uint256 value) external {
+        _manager = manager;
+        _value = value;
+    }
 
-  function setManager(address newManager) external {
-    _manager = newManager;
-  }
+    function getManager() external view returns (address) {
+        return _manager;
+    }
+
+    function setManager(address manager) external {
+        _manager = manager;
+    }
+
 }
 
 contract MockPeripheryContractV2 {
-  address private _manager;
-  uint256 private _value;
-  address private _addressesProvider;
 
-  function initialize(address addressesProvider) external {
-    _addressesProvider = addressesProvider;
-  }
+    address private _manager;
+    uint256 private _value;
+    address private _addressesProvider;
 
-  function getManager() external view returns (address) {
-    return _manager;
-  }
+    function initialize(address addressesProvider) external {
+        _addressesProvider = addressesProvider;
+    }
 
-  function setManager(address newManager) external {
-    _manager = newManager;
-  }
+    function getManager() external view returns (address) {
+        return _manager;
+    }
 
-  function getAddressesProvider() external view returns (address) {
-    return _addressesProvider;
-  }
+    function setManager(address manager) external {
+        _manager = manager;
+    }
+
+    function getAddressesProvider() external view returns (address) {
+        return _addressesProvider;
+    }
+
 }

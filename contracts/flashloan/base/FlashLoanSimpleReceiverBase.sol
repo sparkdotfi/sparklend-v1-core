@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.0;
 
-import {IFlashLoanSimpleReceiver} from '../interfaces/IFlashLoanSimpleReceiver.sol';
-import {IPoolAddressesProvider} from '../../interfaces/IPoolAddressesProvider.sol';
-import {IPool} from '../../interfaces/IPool.sol';
+import { IFlashLoanSimpleReceiver } from '../interfaces/IFlashLoanSimpleReceiver.sol';
+import { IPoolAddressesProvider   } from '../../interfaces/IPoolAddressesProvider.sol';
 
 /**
  * @title FlashLoanSimpleReceiverBase
@@ -11,11 +10,14 @@ import {IPool} from '../../interfaces/IPool.sol';
  * @notice Base contract to develop a flashloan-receiver contract.
  */
 abstract contract FlashLoanSimpleReceiverBase is IFlashLoanSimpleReceiver {
-  IPoolAddressesProvider public immutable override ADDRESSES_PROVIDER;
-  IPool public immutable override POOL;
 
-  constructor(IPoolAddressesProvider provider) {
-    ADDRESSES_PROVIDER = provider;
-    POOL = IPool(provider.getPool());
-  }
+    address public immutable override ADDRESSES_PROVIDER;
+
+    address public immutable override POOL;
+
+    constructor(address provider) {
+        ADDRESSES_PROVIDER = provider;
+        POOL = IPoolAddressesProvider(provider).getPool();
+    }
+
 }
