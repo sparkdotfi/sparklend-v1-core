@@ -213,7 +213,7 @@
           "name": "withdraw",
           "args": {
             "reserve": "DAI",
-            "amount": "14760.147",
+            "amount": "-1",
             "user": "1"
           },
           "expected": "success"

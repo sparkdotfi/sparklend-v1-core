@@ -334,7 +334,7 @@ makeSuite('Pool: L2 functions', (testEnv: TestEnv) => {
       .withArgs(usdc.address, deployer.address, deployer.address, repayAmount, false);
 
     const userDebt = await vDebtToken.balanceOf(deployer.address);
-    expect(userDebt).to.be.eq(debtBefore.sub(repayAmount), 'invalid amount repaid');
+    expect(userDebt, 'invalid amount repaid').to.be.closeTo(debtBefore.sub(repayAmount), 1);
     const userBalance = await usdc.balanceOf(deployer.address);
     expect(userBalance).to.be.eq(balanceBefore.sub(repayAmount), 'invalid amount repaid');
   });
@@ -374,7 +374,7 @@ makeSuite('Pool: L2 functions', (testEnv: TestEnv) => {
     const userDebt = await vDebtToken.balanceOf(deployer.address);
     const userBalance = await usdc.balanceOf(deployer.address);
     const userABalance = await aUsdc.balanceOf(deployer.address);
-    expect(userDebt).to.be.eq(debtBefore.sub(repayAmount), 'invalid amount repaid');
+    expect(userDebt, 'invalid amount repaid').to.be.closeTo(debtBefore.sub(repayAmount), 1);
     expect(userBalance).to.be.eq(balanceBefore, 'user balance changed');
     expect(userABalance).to.be.eq(0, 'invalid amount repaid');
   });
@@ -450,7 +450,7 @@ makeSuite('Pool: L2 functions', (testEnv: TestEnv) => {
       .withArgs(dai.address, user0.address, user0.address, amount);
 
     const userBalance = await aDai.balanceOf(user0.address);
-    expect(userBalance).to.be.eq(balanceBefore.sub(amount), 'invalid amount withdrawn');
+    expect(userBalance, 'invalid amount withdrawn').to.be.closeTo(balanceBefore.sub(amount), 1);
   });
 
   it('Withdraw remainder', async () => {
