@@ -84,7 +84,7 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
       return 0;
     }
 
-    return scaledBalance.rayMul(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
+    return scaledBalance.rayMulCeil(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
   }
 
   /// @inheritdoc IVariableDebtToken
@@ -97,7 +97,10 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     if (user != onBehalfOf) {
       _decreaseBorrowAllowance(onBehalfOf, user, amount);
     }
-    return (_mintScaled(user, onBehalfOf, amount, index), scaledTotalSupply());
+    return (
+      _mintScaled(user, onBehalfOf, amount, index, RoundingMode.ROUND_UP),
+      scaledTotalSupply()
+    );
   }
 
   /// @inheritdoc IVariableDebtToken
@@ -106,13 +109,13 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     uint256 amount,
     uint256 index
   ) external virtual override onlyPool returns (uint256) {
-    _burnScaled(from, address(0), amount, index);
+    _burnScaled(from, address(0), amount, index, RoundingMode.ROUND_DOWN);
     return scaledTotalSupply();
   }
 
   /// @inheritdoc IERC20
   function totalSupply() public view virtual override returns (uint256) {
-    return super.totalSupply().rayMul(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
+    return super.totalSupply().rayMulCeil(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
   }
 
   /// @inheritdoc EIP712Base

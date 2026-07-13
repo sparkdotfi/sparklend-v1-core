@@ -17,6 +17,12 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
   using WadRayMath for uint256;
   using SafeCast for uint256;
 
+  enum RoundingMode {
+    INACTIVE,
+    ROUND_DOWN,
+    ROUND_UP
+  }
+
   /**
    * @dev Constructor.
    * @param pool The reference to the main Pool contract
@@ -67,9 +73,10 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     address caller,
     address onBehalfOf,
     uint256 amount,
-    uint256 index
+    uint256 index,
+    RoundingMode roundingMode
   ) internal returns (bool) {
-    uint256 amountScaled = amount.rayDiv(index);
+    uint256 amountScaled = _roundScaledAmount(amount, index, roundingMode);
     require(amountScaled != 0, Errors.INVALID_MINT_AMOUNT);
 
     uint256 scaledBalance = super.balanceOf(onBehalfOf);
@@ -96,8 +103,14 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    * @param amount The amount getting burned
    * @param index The variable debt index of the reserve
    */
-  function _burnScaled(address user, address target, uint256 amount, uint256 index) internal {
-    uint256 amountScaled = amount.rayDiv(index);
+  function _burnScaled(
+    address user,
+    address target,
+    uint256 amount,
+    uint256 index,
+    RoundingMode roundingMode
+  ) internal {
+    uint256 amountScaled = _roundScaledAmount(amount, index, roundingMode);
     require(amountScaled != 0, Errors.INVALID_BURN_AMOUNT);
 
     uint256 scaledBalance = super.balanceOf(user);
@@ -122,6 +135,7 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
   /**
    * @notice Implements the basic logic to transfer scaled balance tokens between two users
    * @dev It emits a mint event with the interest accrued per user
+   * @dev The scaled transfer amount is rounded up so the recipient receives at least the requested amount
    * @param sender The source address
    * @param recipient The destination address
    * @param amount The amount getting transferred
@@ -139,7 +153,7 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     _userState[sender].additionalData = index.toUint128();
     _userState[recipient].additionalData = index.toUint128();
 
-    super._transfer(sender, recipient, amount.rayDiv(index).toUint128());
+    super._transfer(sender, recipient, amount.rayDivCeil(index).toUint128());
 
     if (senderBalanceIncrease > 0) {
       emit Transfer(address(0), sender, senderBalanceIncrease);
@@ -152,5 +166,19 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     }
 
     emit Transfer(sender, recipient, amount);
+  }
+
+  function _roundScaledAmount(
+    uint256 amount,
+    uint256 index,
+    RoundingMode roundingMode
+  ) private pure returns (uint256) {
+    if (roundingMode == RoundingMode.ROUND_DOWN) {
+      return amount.rayDivFloor(index);
+    }
+    if (roundingMode == RoundingMode.ROUND_UP) {
+      return amount.rayDivCeil(index);
+    }
+    revert(Errors.INVALID_AMOUNT);
   }
 }
