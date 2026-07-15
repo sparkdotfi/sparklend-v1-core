@@ -255,7 +255,7 @@ library GenericLogic {
   ) private view returns (uint256) {
     uint256 normalizedIncome = reserve.getNormalizedIncome();
     uint256 balance = (
-      IScaledBalanceToken(reserve.aTokenAddress).scaledBalanceOf(user).rayMul(normalizedIncome)
+      IScaledBalanceToken(reserve.aTokenAddress).scaledBalanceOf(user).rayMulFloor(normalizedIncome)
     ) * assetPrice;
 
     unchecked {
