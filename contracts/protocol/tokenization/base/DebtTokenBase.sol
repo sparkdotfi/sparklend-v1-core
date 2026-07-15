@@ -93,7 +93,29 @@ abstract contract DebtTokenBase is
    * @param amount The amount to subtract from the current allowance
    */
   function _decreaseBorrowAllowance(address delegator, address delegatee, uint256 amount) internal {
-    uint256 newAllowance = _borrowAllowances[delegator][delegatee] - amount;
+    _decreaseBorrowAllowance(delegator, delegatee, amount, amount);
+  }
+
+  /**
+   * @notice Decreases the borrow allowance of a user on the specific debt token.
+   * @param delegator The address delegating the borrowing power
+   * @param delegatee The address receiving the delegated borrowing power
+   * @param amount The minimum amount to subtract from the current allowance
+   * @param correctedAmount The maximum amount to subtract from the current allowance
+   */
+  function _decreaseBorrowAllowance(
+    address delegator,
+    address delegatee,
+    uint256 amount,
+    uint256 correctedAmount
+  ) internal {
+    uint256 oldBorrowAllowance = _borrowAllowances[delegator][delegatee];
+    require(oldBorrowAllowance >= amount);
+
+    uint256 consumption = oldBorrowAllowance >= correctedAmount
+      ? correctedAmount
+      : oldBorrowAllowance;
+    uint256 newAllowance = oldBorrowAllowance - consumption;
 
     _borrowAllowances[delegator][delegatee] = newAllowance;
 

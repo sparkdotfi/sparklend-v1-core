@@ -95,7 +95,16 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     uint256 index
   ) external virtual override onlyPool returns (bool, uint256) {
     if (user != onBehalfOf) {
-      _decreaseBorrowAllowance(onBehalfOf, user, amount);
+      uint256 scaledBalanceOfOnBehalfOf = super.balanceOf(onBehalfOf);
+      uint256 scaledAmount = amount.rayDivCeil(index);
+
+      _decreaseBorrowAllowance(
+        onBehalfOf,
+        user,
+        amount,
+        (scaledBalanceOfOnBehalfOf + scaledAmount).rayMulCeil(index) -
+          scaledBalanceOfOnBehalfOf.rayMulCeil(index)
+      );
     }
     return (
       _mintScaled(user, onBehalfOf, amount, index, RoundingMode.ROUND_UP),
