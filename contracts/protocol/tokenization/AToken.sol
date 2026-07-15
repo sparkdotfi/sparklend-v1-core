@@ -192,6 +192,29 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     _approve(owner, spender, value);
   }
 
+  /// @inheritdoc IERC20
+  function transferFrom(
+    address sender,
+    address recipient,
+    uint256 amount
+  ) external virtual override(IERC20, IncentivizedERC20) returns (bool) {
+    uint128 castAmount = amount.toUint128();
+    uint256 index = POOL.getReserveNormalizedIncome(_underlyingAsset);
+    uint256 scaledBalanceOfSender = super.balanceOf(sender);
+    uint256 scaledAmount = uint256(castAmount).rayDivCeil(index);
+
+    // Inspired by Aave v3.5: consume allowance based on the sender's actual indexed
+    // balance decrease while preserving exact-allowance transfer compatibility.
+    uint256 actualAmountOut = scaledBalanceOfSender.rayMulFloor(index) -
+      (scaledBalanceOfSender - scaledAmount).rayMulFloor(index);
+
+    _spendAllowance(sender, _msgSender(), castAmount, actualAmountOut);
+
+    _transfer(sender, recipient, castAmount);
+
+    return true;
+  }
+
   /**
    * @notice Transfers the aTokens between two users. Validates the transfer
    * (ie checks for valid HF after the transfer) if required

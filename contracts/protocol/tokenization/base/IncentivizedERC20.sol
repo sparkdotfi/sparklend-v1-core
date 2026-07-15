@@ -22,6 +22,14 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
   using SafeCast for uint256;
 
   /**
+   * @dev   Indicates a failure with the `spender`'s allowance. Used in transfers.
+   * @param spender   Address that may be allowed to operate on tokens without being their owner
+   * @param allowance Amount of tokens a `spender` is allowed to operate with
+   * @param needed    Minimum amount required to perform a transfer
+   */
+  error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
+
+  /**
    * @dev Only pool admin can call functions marked by this modifier.
    */
   modifier onlyPoolAdmin() {
@@ -196,6 +204,28 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
         incentivesControllerLocal.handleAction(recipient, currentTotalSupply, oldRecipientBalance);
       }
     }
+  }
+
+  /**
+   * @notice Updates `owner`'s allowance for `spender` based on `correctedAmount` spent
+   * @param owner The owner of the tokens
+   * @param spender The user allowed to spend on behalf of the owner
+   * @param amount The minimum amount being consumed from the allowance
+   * @param correctedAmount The maximum amount being consumed from the allowance
+   */
+  function _spendAllowance(
+    address owner,
+    address spender,
+    uint256 amount,
+    uint256 correctedAmount
+  ) internal virtual {
+    uint256 currentAllowance = _allowances[owner][spender];
+    if (currentAllowance < amount) {
+      revert ERC20InsufficientAllowance(spender, currentAllowance, amount);
+    }
+
+    uint256 consumption = currentAllowance >= correctedAmount ? correctedAmount : currentAllowance;
+    _approve(owner, spender, currentAllowance - consumption);
   }
 
   /**
