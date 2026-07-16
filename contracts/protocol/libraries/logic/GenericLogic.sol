@@ -50,7 +50,7 @@ library GenericLogic {
         uint256 eModeLtv;
         uint256 eModeLiqThreshold;
         uint256 eModeAssetCategory;
-        address currentReserveAddress;
+        address reserve;
         bool    hasZeroLtvCollateral;
         bool    isInEModeCategory;
     }
@@ -97,9 +97,9 @@ library GenericLogic {
                 continue;
             }
 
-            vars.currentReserveAddress = reservesList[vars.i];
+            vars.reserve = reservesList[vars.i];
 
-            if (vars.currentReserveAddress == address(0)) {
+            if (vars.reserve == address(0)) {
                 unchecked {
                     ++vars.i;
                 }
@@ -107,7 +107,7 @@ library GenericLogic {
                 continue;
             }
 
-            ReserveData storage currentReserve = reservesData[vars.currentReserveAddress];
+            ReserveData storage reserveData = reservesData[vars.reserve];
 
             (
                 vars.ltv,
@@ -116,7 +116,7 @@ library GenericLogic {
                 vars.decimals,
                 ,
                 vars.eModeAssetCategory
-            ) = currentReserve.configuration.getParams();
+            ) = reserveData.configuration.getParams();
 
             unchecked {
                 vars.assetUnit = 10 ** vars.decimals;
@@ -125,12 +125,12 @@ library GenericLogic {
             vars.assetPrice =
                 (vars.eModeAssetPrice != 0) && (params.userEModeCategory == vars.eModeAssetCategory)
                     ? vars.eModeAssetPrice
-                    : IPriceOracleGetter(params.oracle).getAssetPrice(vars.currentReserveAddress);
+                    : IPriceOracleGetter(params.oracle).getAssetPrice(vars.reserve);
 
             if ((vars.liquidationThreshold != 0) && params.userConfig.isUsingAsCollateral(vars.i)) {
                 vars.balance = _getUserBalanceInBaseCurrency(
                     params.user,
-                    currentReserve,
+                    reserveData,
                     vars.assetPrice,
                     vars.assetUnit
                 );
@@ -156,7 +156,7 @@ library GenericLogic {
                 vars.debt +=
                     _getUserDebtInBaseCurrency(
                         params.user,
-                        currentReserve,
+                        reserveData,
                         vars.assetPrice,
                         vars.assetUnit
                     );
@@ -214,28 +214,28 @@ library GenericLogic {
      * @dev    This fetches the `balanceOf` of the stable and variable debt tokens for the user. For
      *         gas reasons, the variable debt balance is calculated by fetching `scaledBalancesOf`
      *         normalized debt, which is cheaper than fetching `balanceOf`
-     * @param  user       The address of the user
-     * @param  reserve    The data of the reserve for which the total debt of the user is being
-     *                    calculated
-     * @param  assetPrice The price of the asset for which the total debt of the user is being
-     *                    calculated
-     * @param  assetUnit  The value representing one full unit of the asset (10^decimals)
-     * @return debt       The total debt of the user normalized to the base currency
+     * @param  user        The address of the user
+     * @param  reserveData The data of the reserve for which the total debt of the user is being
+     *                     calculated
+     * @param  assetPrice  The price of the asset for which the total debt of the user is being
+     *                     calculated
+     * @param  assetUnit   The value representing one full unit of the asset (10^decimals)
+     * @return debt        The total debt of the user normalized to the base currency
      */
     function _getUserDebtInBaseCurrency(
         address             user,
-        ReserveData storage reserve,
+        ReserveData storage reserveData,
         uint256             assetPrice,
         uint256             assetUnit
     ) private view returns (uint256 debt) {
         // fetching variable debt
-        debt = IScaledBalanceToken(reserve.variableDebtToken).scaledBalanceOf(user);
+        debt = IScaledBalanceToken(reserveData.variableDebtToken).scaledBalanceOf(user);
 
         if (debt != 0) {
-            debt = debt.rayMul(reserve.getNormalizedDebt());
+            debt = debt.rayMul(reserveData.getNormalizedDebt());
         }
 
-        debt += IERC20(reserve.stableDebtToken).balanceOf(user);
+        debt += IERC20(reserveData.stableDebtToken).balanceOf(user);
         debt *= assetPrice;
 
         unchecked {
@@ -248,25 +248,25 @@ library GenericLogic {
      *         oracle
      * @dev    For gas reasons, the aToken balance is calculated by fetching `scaledBalancesOf`
      *         normalized debt, which is cheaper than fetching `balanceOf`
-     * @param  user       The address of the user
-     * @param  reserve    The data of the reserve for which the total aToken balance of the user is
-     *                    being calculated
-     * @param  assetPrice The price of the asset for which the total aToken balance of the user is
-     *                    being calculated
-     * @param  assetUnit  The value representing one full unit of the asset (10^decimals)
-     * @return balance    The total aToken balance of the user normalized to the base currency of
-     *                    the price oracle
+     * @param  user        The address of the user
+     * @param  reserveData The data of the reserve for which the total aToken balance of the user is
+     *                     being calculated
+     * @param  assetPrice  The price of the asset for which the total aToken balance of the user is
+     *                     being calculated
+     * @param  assetUnit   The value representing one full unit of the asset (10^decimals)
+     * @return balance     The total aToken balance of the user normalized to the base currency of
+     *                     the price oracle
      */
     function _getUserBalanceInBaseCurrency(
         address             user,
-        ReserveData storage reserve,
+        ReserveData storage reserveData,
         uint256             assetPrice,
         uint256             assetUnit
     ) private view returns (uint256 balance) {
-        uint256 normalizedIncome = reserve.getNormalizedIncome();
+        uint256 normalizedIncome = reserveData.getNormalizedIncome();
 
         balance =
-            IScaledBalanceToken(reserve.aToken).scaledBalanceOf(user).rayMul(normalizedIncome) *
+            IScaledBalanceToken(reserveData.aToken).scaledBalanceOf(user).rayMul(normalizedIncome) *
             assetPrice;
 
         unchecked {

@@ -39,7 +39,7 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
      * @dev Only pool can call functions marked by this modifier.
      */
     modifier onlyPool() {
-        require(_msgSender() == address(POOL), Errors.CALLER_MUST_BE_POOL);
+        require(_msgSender() == POOL, Errors.CALLER_MUST_BE_POOL);
 
         _;
     }

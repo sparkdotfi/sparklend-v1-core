@@ -44,7 +44,12 @@ contract AaveProtocolDataProvider is IPoolDataProvider {
     }
 
     /// @inheritdoc IPoolDataProvider
-    function getAllReservesTokens() external view override returns (TokenData[] memory reservesTokens) {
+    function getAllReservesTokens()
+        external
+        view
+        override
+        returns (TokenData[] memory reservesTokens)
+    {
         IPool pool = IPool(IPoolAddressesProvider(ADDRESSES_PROVIDER).getPool());
 
         address[] memory reserves = pool.getReservesList();
@@ -78,11 +83,11 @@ contract AaveProtocolDataProvider is IPoolDataProvider {
         aTokens = new TokenData[](reserves.length);
 
         for (uint256 i = 0; i < reserves.length; i++) {
-            ReserveData memory reserveData = pool.getReserveData(reserves[i]);
+            address aToken = pool.getReserveData(reserves[i]).aToken;
 
             aTokens[i] = TokenData({
-                symbol: IERC20Detailed(reserveData.aToken).symbol(),
-                token: reserveData.aToken
+                symbol : IERC20Detailed(aToken).symbol(),
+                token  : aToken
             });
         }
     }
@@ -204,22 +209,22 @@ contract AaveProtocolDataProvider is IPoolDataProvider {
         uint40 lastUpdateTimestamp
         )
     {
-        ReserveData memory reserve =
+        ReserveData memory data =
             IPool(IPoolAddressesProvider(ADDRESSES_PROVIDER).getPool()).getReserveData(asset);
 
         return (
-            reserve.unbacked,
-            reserve.accruedToTreasury,
-            IERC20Detailed(reserve.aToken).totalSupply(),
-            IERC20Detailed(reserve.stableDebtToken).totalSupply(),
-            IERC20Detailed(reserve.variableDebtToken).totalSupply(),
-            reserve.currentLiquidityRate,
-            reserve.currentVariableBorrowRate,
-            reserve.currentStableBorrowRate,
-            IStableDebtToken(reserve.stableDebtToken).getAverageStableRate(),
-            reserve.liquidityIndex,
-            reserve.variableBorrowIndex,
-            reserve.lastUpdateTimestamp
+            data.unbacked,
+            data.accruedToTreasury,
+            IERC20Detailed(data.aToken).totalSupply(),
+            IERC20Detailed(data.stableDebtToken).totalSupply(),
+            IERC20Detailed(data.variableDebtToken).totalSupply(),
+            data.liquidityRate,
+            data.variableBorrowRate,
+            data.stableBorrowRate,
+            IStableDebtToken(data.stableDebtToken).getAverageStableRate(),
+            data.liquidityIndex,
+            data.variableBorrowIndex,
+            data.lastUpdateTimestamp
         );
     }
 
@@ -235,12 +240,12 @@ contract AaveProtocolDataProvider is IPoolDataProvider {
 
     /// @inheritdoc IPoolDataProvider
     function getTotalDebt(address asset) external view override returns (uint256) {
-        ReserveData memory reserve =
+        ReserveData memory data =
             IPool(IPoolAddressesProvider(ADDRESSES_PROVIDER).getPool()).getReserveData(asset);
 
         return
-            IERC20Detailed(reserve.stableDebtToken).totalSupply() +
-            IERC20Detailed(reserve.variableDebtToken).totalSupply();
+            IERC20Detailed(data.stableDebtToken).totalSupply() +
+            IERC20Detailed(data.variableDebtToken).totalSupply();
     }
 
     /// @inheritdoc IPoolDataProvider
@@ -252,9 +257,9 @@ contract AaveProtocolDataProvider is IPoolDataProvider {
         view
         override
         returns (
-            uint256 currentATokenBalance,
-            uint256 currentStableDebt,
-            uint256 currentVariableDebt,
+            uint256 aTokenBalance,
+            uint256 stableDebt,
+            uint256 variableDebt,
             uint256 principalStableDebt,
             uint256 scaledVariableDebt,
             uint256 stableBorrowRate,
@@ -263,23 +268,19 @@ contract AaveProtocolDataProvider is IPoolDataProvider {
             bool    usageAsCollateralEnabled
         )
     {
-        ReserveData memory reserve =
-            IPool(IPoolAddressesProvider(ADDRESSES_PROVIDER).getPool()).getReserveData(asset);
+        IPool pool = IPool(IPoolAddressesProvider(ADDRESSES_PROVIDER).getPool());
 
-        UserConfigurationMap memory userConfig =
-            IPool(IPoolAddressesProvider(ADDRESSES_PROVIDER).getPool()).getUserConfiguration(user);
+        ReserveData memory data = pool.getReserveData(asset);
 
-        currentATokenBalance = IERC20Detailed(reserve.aToken).balanceOf(user);
-        currentVariableDebt  = IERC20Detailed(reserve.variableDebtToken).balanceOf(user);
-        currentStableDebt    = IERC20Detailed(reserve.stableDebtToken).balanceOf(user);
-        principalStableDebt  = IStableDebtToken(reserve.stableDebtToken).principalBalanceOf(user);
-        scaledVariableDebt   = IVariableDebtToken(reserve.variableDebtToken).scaledBalanceOf(user);
-        liquidityRate        = reserve.currentLiquidityRate;
-        stableBorrowRate     = IStableDebtToken(reserve.stableDebtToken).getUserStableRate(user);
-
-        stableRateLastUpdated = IStableDebtToken(reserve.stableDebtToken).getUserLastUpdated(user);
-
-        usageAsCollateralEnabled = userConfig.isUsingAsCollateral(reserve.id);
+        aTokenBalance            = IERC20Detailed(data.aToken).balanceOf(user);
+        stableDebt               = IERC20Detailed(data.stableDebtToken).balanceOf(user);
+        variableDebt             = IERC20Detailed(data.variableDebtToken).balanceOf(user);
+        principalStableDebt      = IStableDebtToken(data.stableDebtToken).principalBalanceOf(user);
+        scaledVariableDebt       = IVariableDebtToken(data.variableDebtToken).scaledBalanceOf(user);
+        stableBorrowRate         = IStableDebtToken(data.stableDebtToken).getUserStableRate(user);
+        liquidityRate            = data.liquidityRate;
+        stableRateLastUpdated    = IStableDebtToken(data.stableDebtToken).getUserLastUpdated(user);
+        usageAsCollateralEnabled = pool.getUserConfiguration(user).isUsingAsCollateral(data.id);
     }
 
     /// @inheritdoc IPoolDataProvider
@@ -295,13 +296,13 @@ contract AaveProtocolDataProvider is IPoolDataProvider {
             address variableDebtToken
         )
     {
-        ReserveData memory reserve =
+        ReserveData memory data =
             IPool(IPoolAddressesProvider(ADDRESSES_PROVIDER).getPool()).getReserveData(asset);
 
         return (
-            reserve.aToken,
-            reserve.stableDebtToken,
-            reserve.variableDebtToken
+            data.aToken,
+            data.stableDebtToken,
+            data.variableDebtToken
         );
     }
 

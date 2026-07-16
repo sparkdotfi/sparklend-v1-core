@@ -505,7 +505,7 @@ contract Pool is IPool, VersionedInitializable, PoolStorage {
             uint256 totalCollateralBase,
             uint256 totalDebtBase,
             uint256 availableBorrowsBase,
-            uint256 currentLiquidationThreshold,
+            uint256 liquidationThreshold,
             uint256 ltv,
             uint256 healthFactor
         )

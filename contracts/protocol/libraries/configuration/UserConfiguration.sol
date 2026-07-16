@@ -22,14 +22,14 @@ library UserConfiguration {
 
     /**
      * @notice Sets if the user is borrowing the reserve identified by reserveIndex
-     * @param  self The configuration object
+     * @param  self         The configuration object
      * @param  reserveIndex The index of the reserve in the bitmap
-     * @param  borrowing True if the user is borrowing the reserve, false otherwise
+     * @param  borrowing    True if the user is borrowing the reserve, false otherwise
      */
     function setBorrowing(
         UserConfigurationMap storage self,
-        uint256 reserveIndex,
-        bool borrowing
+        uint256                      reserveIndex,
+        bool                         borrowing
     ) internal {
         unchecked {
             require(
@@ -49,14 +49,14 @@ library UserConfiguration {
 
     /**
      * @notice Sets if the user is using as collateral the reserve identified by reserveIndex
-     * @param  self The configuration object
-     * @param  reserveIndex The index of the reserve in the bitmap
+     * @param  self              The configuration object
+     * @param  reserveIndex      The index of the reserve in the bitmap
      * @param  usingAsCollateral True if the user is using the reserve as collateral, false otherwise
      */
     function setUsingAsCollateral(
         UserConfigurationMap storage self,
-        uint256 reserveIndex,
-        bool usingAsCollateral
+        uint256                      reserveIndex,
+        bool                         usingAsCollateral
     ) internal {
         unchecked {
             require(

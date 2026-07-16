@@ -154,9 +154,9 @@ contract DefaultReserveInterestRateStrategy is IDefaultInterestRateStrategy {
     struct CalcInterestRatesLocalVars {
         uint256 availableLiquidity;
         uint256 totalDebt;
-        uint256 currentVariableBorrowRate;
-        uint256 currentStableBorrowRate;
-        uint256 currentLiquidityRate;
+        uint256 variableBorrowRate;
+        uint256 stableBorrowRate;
+        uint256 liquidityRate;
         uint256 borrowUsageRatio;
         uint256 supplyUsageRatio;
         uint256 stableToTotalDebtRatio;
@@ -169,10 +169,10 @@ contract DefaultReserveInterestRateStrategy is IDefaultInterestRateStrategy {
     ) public view override returns (uint256, uint256, uint256) {
         CalcInterestRatesLocalVars memory vars;
 
-        vars.totalDebt                 = params.totalStableDebt + params.totalVariableDebt;
-        vars.currentLiquidityRate      = 0;
-        vars.currentVariableBorrowRate = _baseVariableBorrowRate;
-        vars.currentStableBorrowRate   = getBaseStableBorrowRate();
+        vars.totalDebt          = params.totalStableDebt + params.totalVariableDebt;
+        vars.liquidityRate      = 0;
+        vars.variableBorrowRate = _baseVariableBorrowRate;
+        vars.stableBorrowRate   = getBaseStableBorrowRate();
 
         if (vars.totalDebt != 0) {
             vars.stableToTotalDebtRatio = params.totalStableDebt.rayDiv(vars.totalDebt);
@@ -194,16 +194,16 @@ contract DefaultReserveInterestRateStrategy is IDefaultInterestRateStrategy {
             uint256 excessBorrowUsageRatio =
                 (vars.borrowUsageRatio - OPTIMAL_USAGE_RATIO).rayDiv(MAX_EXCESS_USAGE_RATIO);
 
-            vars.currentStableBorrowRate +=
+            vars.stableBorrowRate +=
                 _stableRateSlope1 +_stableRateSlope2.rayMul(excessBorrowUsageRatio);
 
-            vars.currentVariableBorrowRate +=
+            vars.variableBorrowRate +=
                 _variableRateSlope1 + _variableRateSlope2.rayMul(excessBorrowUsageRatio);
         } else {
-            vars.currentStableBorrowRate +=
+            vars.stableBorrowRate +=
                 _stableRateSlope1.rayMul(vars.borrowUsageRatio).rayDiv(OPTIMAL_USAGE_RATIO);
 
-            vars.currentVariableBorrowRate +=
+            vars.variableBorrowRate +=
                 _variableRateSlope1.rayMul(vars.borrowUsageRatio).rayDiv(OPTIMAL_USAGE_RATIO);
         }
 
@@ -212,23 +212,23 @@ contract DefaultReserveInterestRateStrategy is IDefaultInterestRateStrategy {
                 (vars.stableToTotalDebtRatio - OPTIMAL_STABLE_TO_TOTAL_DEBT_RATIO)
                     .rayDiv(MAX_EXCESS_STABLE_TO_TOTAL_DEBT_RATIO);
 
-            vars.currentStableBorrowRate += _stableRateExcessOffset.rayMul(excessStableDebtRatio);
+            vars.stableBorrowRate += _stableRateExcessOffset.rayMul(excessStableDebtRatio);
         }
 
-        vars.currentLiquidityRate =
+        vars.liquidityRate =
             _getOverallBorrowRate(
                 params.totalStableDebt,
                 params.totalVariableDebt,
-                vars.currentVariableBorrowRate,
+                vars.variableBorrowRate,
                 params.averageStableBorrowRate
             )
                 .rayMul(vars.supplyUsageRatio)
                 .percentMul(PercentageMath.PERCENTAGE_FACTOR - params.reserveFactor);
 
         return (
-            vars.currentLiquidityRate,
-            vars.currentStableBorrowRate,
-            vars.currentVariableBorrowRate
+            vars.liquidityRate,
+            vars.stableBorrowRate,
+            vars.variableBorrowRate
         );
     }
 

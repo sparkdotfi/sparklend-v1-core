@@ -5,20 +5,20 @@ import { IERC20 }       from '../../../dependencies/openzeppelin/contracts/IERC2
 import { ReserveCache } from '../types/DataTypes.sol';
 
 /**
- * @title Helpers library
+ * @title  Helpers library
  * @author Aave
  */
 library Helpers {
 
     /**
      * @notice Fetches the user current stable and variable debt balances
-     * @param  user The user address
+     * @param  user         The user address
      * @param  reserveCache The reserve cache data object
-     * @return stableDebt The stable debt balance
+     * @return stableDebt   The stable debt balance
      * @return variableDebt The variable debt balance
      */
     function getUserCurrentDebt(
-        address user,
+        address             user,
         ReserveCache memory reserveCache
     ) internal view returns (uint256, uint256) {
         return (

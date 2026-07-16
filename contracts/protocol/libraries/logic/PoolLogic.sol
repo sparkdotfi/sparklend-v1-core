@@ -104,22 +104,22 @@ library PoolLogic {
         for (uint256 i = 0; i < assets.length; i++) {
             address asset = assets[i];
 
-            ReserveData storage reserve = reservesData[asset];
+            ReserveData storage reserveData = reservesData[asset];
 
             // this cover both inactive reserves and invalid reserves since the flag will be 0 for
             // both
-            if (!reserve.configuration.getActive()) continue;
+            if (!reserveData.configuration.getActive()) continue;
 
-            uint256 accruedToTreasury = reserve.accruedToTreasury;
+            uint256 accruedToTreasury = reserveData.accruedToTreasury;
 
             if (accruedToTreasury == 0) continue;
 
-            reserve.accruedToTreasury = 0;
+            reserveData.accruedToTreasury = 0;
 
-            uint256 normalizedIncome = reserve.getNormalizedIncome();
+            uint256 normalizedIncome = reserveData.getNormalizedIncome();
             uint256 amountToMint     = accruedToTreasury.rayMul(normalizedIncome);
 
-            IAToken(reserve.aToken).mintToTreasury(amountToMint, normalizedIncome);
+            IAToken(reserveData.aToken).mintToTreasury(amountToMint, normalizedIncome);
 
             emit MintedToTreasury(asset, amountToMint);
         }
@@ -156,11 +156,11 @@ library PoolLogic {
         mapping (uint256 => address)     storage reservesList,
         address                                  asset
     ) external {
-        ReserveData storage reserve = reservesData[asset];
+        ReserveData storage reserveData = reservesData[asset];
 
-        ValidationLogic.validateDropReserve(reservesList, reserve, asset);
+        ValidationLogic.validateDropReserve(reservesList, reserveData, asset);
 
-        delete reservesList[reserve.id];
+        delete reservesList[reserveData.id];
         delete reservesData[asset];
     }
 

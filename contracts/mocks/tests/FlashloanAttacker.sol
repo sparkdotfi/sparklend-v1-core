@@ -47,7 +47,7 @@ contract FlashloanAttacker is FlashLoanSimpleReceiverBase {
         _innerBorrow(asset);
 
         MintableERC20(asset).mint(premium);
-        IERC20(asset).approve(address(POOL), amountToReturn);
+        IERC20(asset).approve(POOL, amountToReturn);
 
         return true;
     }

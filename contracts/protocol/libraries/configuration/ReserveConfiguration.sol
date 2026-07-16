@@ -69,7 +69,7 @@ library ReserveConfiguration {
     /**
      * @notice Sets the Loan to Value of the reserve
      * @param  self The reserve configuration
-     * @param  ltv The new ltv
+     * @param  ltv  The new ltv
      */
     function setLtv(ReserveConfigurationMap memory self, uint256 ltv) internal pure {
         require(ltv <= MAX_VALID_LTV, Errors.INVALID_LTV);
@@ -79,8 +79,8 @@ library ReserveConfiguration {
 
     /**
      * @notice Gets the Loan to Value of the reserve
-     * @param self The reserve configuration
-     * @return The loan to value
+     * @param  self The reserve configuration
+     * @return The  loan to value
      */
     function getLtv(ReserveConfigurationMap memory self) internal pure returns (uint256) {
         return self.data & ~LTV_MASK;
@@ -88,12 +88,12 @@ library ReserveConfiguration {
 
     /**
      * @notice Sets the liquidation threshold of the reserve
-     * @param  self The reserve configuration
+     * @param  self      The reserve configuration
      * @param  threshold The new liquidation threshold
      */
     function setLiquidationThreshold(
         ReserveConfigurationMap memory self,
-        uint256 threshold
+        uint256                        threshold
     ) internal pure {
         require(threshold <= MAX_VALID_LIQUIDATION_THRESHOLD, Errors.INVALID_LIQ_THRESHOLD);
 
@@ -104,7 +104,7 @@ library ReserveConfiguration {
 
     /**
      * @notice Gets the liquidation threshold of the reserve
-     * @param  self The reserve configuration
+     * @param  self      The reserve configuration
      * @return threshold The liquidation threshold
      */
     function getLiquidationThreshold(
@@ -116,12 +116,12 @@ library ReserveConfiguration {
 
     /**
      * @notice Sets the liquidation bonus of the reserve
-     * @param  self The reserve configuration
+     * @param  self  The reserve configuration
      * @param  bonus The new liquidation bonus
      */
     function setLiquidationBonus(
         ReserveConfigurationMap memory self,
-        uint256 bonus
+        uint256                        bonus
     ) internal pure {
         require(bonus <= MAX_VALID_LIQUIDATION_BONUS, Errors.INVALID_LIQ_BONUS);
 
@@ -132,7 +132,7 @@ library ReserveConfiguration {
 
     /**
      * @notice Gets the liquidation bonus of the reserve
-     * @param  self The reserve configuration
+     * @param  self  The reserve configuration
      * @return bonus The liquidation bonus
      */
     function getLiquidationBonus(
@@ -143,7 +143,7 @@ library ReserveConfiguration {
 
     /**
      * @notice Sets the decimals of the underlying asset of the reserve
-     * @param  self The reserve configuration
+     * @param  self     The reserve configuration
      * @param  decimals The decimals
      */
     function setDecimals(
@@ -157,7 +157,7 @@ library ReserveConfiguration {
 
     /**
      * @notice Gets the decimals of the underlying asset of the reserve
-     * @param  self The reserve configuration
+     * @param  self     The reserve configuration
      * @return decimals The decimals of the asset
      */
     function getDecimals(
@@ -168,7 +168,7 @@ library ReserveConfiguration {
 
     /**
      * @notice Sets the active state of the reserve
-     * @param  self The reserve configuration
+     * @param  self   The reserve configuration
      * @param  active The active state
      */
     function setActive(ReserveConfigurationMap memory self, bool active) internal pure {
@@ -179,7 +179,7 @@ library ReserveConfiguration {
 
     /**
      * @notice Gets the active state of the reserve
-     * @param  self The reserve configuration
+     * @param  self   The reserve configuration
      * @return active The active state
      */
     function getActive(ReserveConfigurationMap memory self) internal pure returns (bool) {
@@ -188,7 +188,7 @@ library ReserveConfiguration {
 
     /**
      * @notice Sets the frozen state of the reserve
-     * @param  self The reserve configuration
+     * @param  self   The reserve configuration
      * @param  frozen The frozen state
      */
     function setFrozen(ReserveConfigurationMap memory self, bool frozen) internal pure {
@@ -199,7 +199,7 @@ library ReserveConfiguration {
 
     /**
      * @notice Gets the frozen state of the reserve
-     * @param  self The reserve configuration
+     * @param  self   The reserve configuration
      * @return frozen The frozen state
      */
     function getFrozen(ReserveConfigurationMap memory self) internal pure returns (bool) {
@@ -208,7 +208,7 @@ library ReserveConfiguration {
 
     /**
      * @notice Sets the paused state of the reserve
-     * @param self The reserve configuration
+     * @param self   The reserve configuration
      * @param paused The paused state
      */
     function setPaused(ReserveConfigurationMap memory self, bool paused) internal pure {
@@ -219,7 +219,7 @@ library ReserveConfiguration {
 
     /**
      * @notice Gets the paused state of the reserve
-     * @param  self The reserve configuration
+     * @param  self   The reserve configuration
      * @return paused The paused state
      */
     function getPaused(ReserveConfigurationMap memory self) internal pure returns (bool) {

@@ -178,9 +178,9 @@ interface IPoolDataProvider {
      * @notice Returns the user data in a reserve
      * @param  asset                    The address of the underlying asset of the reserve
      * @param  user                     The address of the user
-     * @return currentATokenBalance     The current AToken balance of the user
-     * @return currentStableDebt        The current stable debt of the user
-     * @return currentVariableDebt      The current variable debt of the user
+     * @return aTokenBalance            The current AToken balance of the user
+     * @return stableDebt               The current stable debt of the user
+     * @return variableDebt             The current variable debt of the user
      * @return principalStableDebt      The principal stable debt of the user
      * @return scaledVariableDebt       The scaled variable debt of the user
      * @return stableBorrowRate         The stable borrow rate of the user
@@ -196,9 +196,9 @@ interface IPoolDataProvider {
         external
         view
         returns (
-            uint256 currentATokenBalance,
-            uint256 currentStableDebt,
-            uint256 currentVariableDebt,
+            uint256 aTokenBalance,
+            uint256 stableDebt,
+            uint256 variableDebt,
             uint256 principalStableDebt,
             uint256 scaledVariableDebt,
             uint256 stableBorrowRate,

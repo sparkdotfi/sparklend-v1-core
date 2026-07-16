@@ -75,23 +75,23 @@ library BridgeLogic {
         address onBehalfOf,
         uint16  referralCode
     ) external {
-        ReserveData storage reserve = reservesData[asset];
+        ReserveData storage reserveData = reservesData[asset];
 
-        ReserveCache memory reserveCache = reserve.cache();
+        ReserveCache memory reserveCache = resreserveDataerve.cache();
 
-        reserve.updateState(reserveCache);
-        ValidationLogic.validateSupply(reserveCache, reserve, amount);
+        reserveData.updateState(reserveCache);
+        ValidationLogic.validateSupply(reserveCache, reserveData, amount);
 
         uint256 unbackedMintCap = reserveCache.reserveConfiguration.getUnbackedMintCap();
         uint256 reserveDecimals = reserveCache.reserveConfiguration.getDecimals();
-        uint256 unbacked        = reserve.unbacked += amount.toUint128();
+        uint256 unbacked        = reserveData.unbacked += amount.toUint128();
 
         require(
             unbacked <= unbackedMintCap * (10 ** reserveDecimals),
             Errors.UNBACKED_MINT_CAP_EXCEEDED
         );
 
-        reserve.updateInterestRates(reserveCache, asset, 0, 0);
+        resreserveDataerve.updateInterestRates(reserveCache, asset, 0, 0);
 
         bool isFirstSupply =
             IAToken(reserveCache.aToken)
@@ -107,7 +107,7 @@ library BridgeLogic {
                 reserveCache.aToken
             )
         ) {
-            userConfig.setUsingAsCollateral(reserve.id, true);
+            userConfig.setUsingAsCollateral(reserveData.id, true);
 
             emit ReserveUsedAsCollateralEnabled(asset, onBehalfOf);
         }
@@ -119,7 +119,7 @@ library BridgeLogic {
      * @notice Back the current unbacked with `amount` and pay `fee`.
      * @dev    It is not possible to back more than the existing unbacked amount of the reserve
      * @dev    Emits the `BackUnbacked` event
-     * @param  reserve        The reserve to back unbacked for
+     * @param  reserveData    The reserve to back unbacked for
      * @param  asset          The address of the underlying asset to repay
      * @param  amount         The amount to back
      * @param  fee            The amount paid in fees
@@ -127,35 +127,35 @@ library BridgeLogic {
      * @return backingAmount  The backed amount
      */
     function executeBackUnbacked(
-        ReserveData storage reserve,
+        ReserveData storage reserveData,
         address             asset,
         uint256             amount,
         uint256             fee,
         uint256             protocolFeeBps
     ) external returns (uint256 backingAmount) {
-        ReserveCache memory reserveCache = reserve.cache();
+        ReserveCache memory reserveCache = reserveData.cache();
 
-        reserve.updateState(reserveCache);
+        reserveData.updateState(reserveCache);
 
-        backingAmount = (amount < reserve.unbacked) ? amount : reserve.unbacked;
+        backingAmount = (amount < reserveData.unbacked) ? amount : reserveData.unbacked;
 
         uint256 feeToProtocol = fee.percentMul(protocolFeeBps);
         uint256 feeToLP       = fee - feeToProtocol;
         uint256 added         = backingAmount + fee;
 
         reserveCache.nextLiquidityIndex =
-            reserve.cumulateToLiquidityIndex(
+            reserveData.cumulateToLiquidityIndex(
                 IERC20(reserveCache.aToken).totalSupply() +
-                uint256(reserve.accruedToTreasury).rayMul(reserveCache.nextLiquidityIndex),
+                uint256(reserveData.accruedToTreasury).rayMul(reserveCache.nextLiquidityIndex),
                 feeToLP
             );
 
-        reserve.accruedToTreasury +=
+        reserveData.accruedToTreasury +=
             feeToProtocol.rayDiv(reserveCache.nextLiquidityIndex).toUint128();
 
-        reserve.unbacked -= backingAmount.toUint128();
+        reserveData.unbacked -= backingAmount.toUint128();
 
-        reserve.updateInterestRates(reserveCache, asset, added, 0);
+        reserveData.updateInterestRates(reserveCache, asset, added, 0);
 
         IERC20(asset).safeTransferFrom(msg.sender, reserveCache.aToken, added);
 

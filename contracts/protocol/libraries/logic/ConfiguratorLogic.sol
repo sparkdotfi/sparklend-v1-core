@@ -113,15 +113,15 @@ library ConfiguratorLogic {
             input.interestRateStrategy
         );
 
-        ReserveConfigurationMap memory currentConfig = ReserveConfigurationMap(0);
+        ReserveConfigurationMap memory config = ReserveConfigurationMap(0);
 
-        currentConfig.setDecimals(input.underlyingAssetDecimals);
+        config.setDecimals(input.underlyingAssetDecimals);
 
-        currentConfig.setActive(true);
-        currentConfig.setPaused(false);
-        currentConfig.setFrozen(false);
+        config.setActive(true);
+        config.setPaused(false);
+        config.setFrozen(false);
 
-        IPool(pool).setConfiguration(input.underlyingAsset, currentConfig);
+        IPool(pool).setConfiguration(input.underlyingAsset, config);
 
         emit ReserveInitialized(
             input.underlyingAsset,

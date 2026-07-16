@@ -120,9 +120,9 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
         uint256 previousSupply;
         uint256 nextSupply;
         uint256 amountInRay;
-        uint256 currentStableRate;
+        uint256 stableRate;
         uint256 nextStableRate;
-        uint256 currentAvgStableRate;
+        uint256 avgStableRate;
     }
 
     /// @inheritdoc IStableDebtToken
@@ -141,15 +141,15 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
         ( , uint256 startingBalance, uint256 balanceIncrease ) =
             _calculateBalanceIncrease(onBehalfOf);
 
-        vars.previousSupply       = totalSupply();
-        vars.currentAvgStableRate = _avgStableRate;
-        vars.nextSupply           = _totalSupply = vars.previousSupply + amount;
-        vars.amountInRay          = amount.wadToRay();
-        vars.currentStableRate    = _userState[onBehalfOf].additionalData;
+        vars.previousSupply = totalSupply();
+        vars.avgStableRate  = _avgStableRate;
+        vars.nextSupply     = _totalSupply = vars.previousSupply + amount;
+        vars.amountInRay    = amount.wadToRay();
+        vars.stableRate     = _userState[onBehalfOf].additionalData;
 
         vars.nextStableRate =
             (
-                vars.currentStableRate.rayMul(startingBalance.wadToRay()) +
+                vars.stableRate.rayMul(startingBalance.wadToRay()) +
                 vars.amountInRay.rayMul(rate)
             ).rayDiv((startingBalance + amount).wadToRay());
 
@@ -159,11 +159,11 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
         _totalSupplyTimestamp = _timestamps[onBehalfOf] = uint40(block.timestamp);
 
         // Calculates the updated average stable rate
-        vars.currentAvgStableRate =
+        vars.avgStableRate =
             _avgStableRate =
                 (
                     (
-                        vars.currentAvgStableRate.rayMul(vars.previousSupply.wadToRay()) +
+                        vars.avgStableRate.rayMul(vars.previousSupply.wadToRay()) +
                         rate.rayMul(vars.amountInRay)
                     ).rayDiv(vars.nextSupply.wadToRay())
                 ).toUint128();
@@ -181,11 +181,11 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
             startingBalance,
             balanceIncrease,
             vars.nextStableRate,
-            vars.currentAvgStableRate,
+            vars.avgStableRate,
             vars.nextSupply
         );
 
-        return (startingBalance == 0, vars.nextSupply, vars.currentAvgStableRate);
+        return (startingBalance == 0, vars.nextSupply, vars.avgStableRate);
     }
 
     /// @inheritdoc IStableDebtToken

@@ -22,7 +22,7 @@ contract AaveOracle is IAaveOracle {
     address public immutable ADDRESSES_PROVIDER;
 
     // Map of asset price sources (asset => priceSource)
-    mapping(address => AggregatorInterface) private assetsSources;
+    mapping(address => address) private assetsSources;
 
     address private _fallbackOracle;
 
@@ -92,7 +92,7 @@ contract AaveOracle is IAaveOracle {
         require(assets.length == sources.length, Errors.INCONSISTENT_PARAMS_LENGTH);
 
         for (uint256 i = 0; i < assets.length; i++) {
-            assetsSources[assets[i]] = AggregatorInterface(sources[i]);
+            assetsSources[assets[i]] = sources[i];
 
             emit AssetSourceUpdated(assets[i], sources[i]);
         }
@@ -110,15 +110,15 @@ contract AaveOracle is IAaveOracle {
 
     /// @inheritdoc IPriceOracleGetter
     function getAssetPrice(address asset) public view override returns (uint256) {
-        AggregatorInterface source = assetsSources[asset];
+        address source = assetsSources[asset];
 
         if (asset == BASE_CURRENCY) return BASE_CURRENCY_UNIT;
 
-        if (address(source) == address(0)) {
+        if (source == address(0)) {
             return IPriceOracleGetter(_fallbackOracle).getAssetPrice(asset);
         }
 
-        int256 price = source.latestAnswer();
+        int256 price = AggregatorInterface(source).latestAnswer();
 
         return
             price > 0 ? uint256(price) : IPriceOracleGetter(_fallbackOracle).getAssetPrice(asset);
@@ -137,12 +137,12 @@ contract AaveOracle is IAaveOracle {
 
     /// @inheritdoc IAaveOracle
     function getSourceOfAsset(address asset) external view override returns (address) {
-        return address(assetsSources[asset]);
+        return assetsSources[asset];
     }
 
     /// @inheritdoc IAaveOracle
     function getFallbackOracle() external view returns (address) {
-        return address(_fallbackOracle);
+        return _fallbackOracle;
     }
 
     function _onlyAssetListingOrPoolAdmins() internal view {

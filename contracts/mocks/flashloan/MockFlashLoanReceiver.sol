@@ -71,7 +71,7 @@ contract MockFlashLoanReceiver is FlashLoanReceiverBase {
             // mint to this contract the specific amount
             MintableERC20(assets[i]).mint(premiums[i]);
 
-            IERC20(assets[i]).approve(address(POOL), amountToReturn);
+            IERC20(assets[i]).approve(POOL, amountToReturn);
         }
 
         emit ExecutedWithSuccess(assets, amounts, premiums);

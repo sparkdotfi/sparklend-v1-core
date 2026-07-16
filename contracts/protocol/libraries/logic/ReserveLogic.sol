@@ -61,7 +61,7 @@ library ReserveLogic {
             ? data.liquidityIndex
             : getNextIndex({
                     currentIndex  : data.liquidityIndex,
-                    rate          : data.currentLiquidityRate,
+                    rate          : data.liquidityRate,
                     lastTimestamp : timestamp,
                     getIndex      : MathUtils.getLinearIndex
                 });
@@ -83,7 +83,7 @@ library ReserveLogic {
             ? data.variableBorrowIndex
             : getNextIndex({
                     currentIndex  : data.variableBorrowIndex,
-                    rate          : data.currentVariableBorrowRate,
+                    rate          : data.variableBorrowRate,
                     lastTimestamp : timestamp,
                     getIndex      : MathUtils.getCompoundedIndexToNow
                 });
@@ -198,9 +198,9 @@ library ReserveLogic {
                 })
             );
 
-        data.currentLiquidityRate      = vars.nextLiquidityRate.toUint128();
-        data.currentStableBorrowRate   = vars.nextStableRate.toUint128();
-        data.currentVariableBorrowRate = vars.nextVariableRate.toUint128();
+        data.liquidityRate      = vars.nextLiquidityRate.toUint128();
+        data.stableBorrowRate   = vars.nextStableRate.toUint128();
+        data.variableBorrowRate = vars.nextVariableRate.toUint128();
 
         emit ReserveDataUpdated(
             reserve,
@@ -213,9 +213,9 @@ library ReserveLogic {
     }
 
     struct AccrueToTreasuryLocalVars {
-        uint256 prevTotalStableDebt;
-        uint256 prevTotalVariableDebt;
-        uint256 currTotalVariableDebt;
+        uint256 previousTotalStableDebt;
+        uint256 previousTotalVariableDebt;
+        uint256 totalVariableDebt;
         uint256 cumulatedStableInterest;
         uint256 totalDebtAccrued;
         uint256 amountToMint;
@@ -233,30 +233,30 @@ library ReserveLogic {
         if (cache.reserveFactor == 0) return;
 
         //calculate the total variable debt at moment of the last interaction
-        vars.prevTotalVariableDebt =
-            cache.currScaledVariableDebt.rayMul(cache.currVariableBorrowIndex);
+        vars.previousTotalVariableDebt =
+            cache.scaledVariableDebt.rayMul(cache.variableBorrowIndex);
 
         //calculate the new total variable debt after accumulation of the interest on the index
-        vars.currTotalVariableDebt =
-            cache.currScaledVariableDebt.rayMul(cache.nextVariableBorrowIndex);
+        vars.totalVariableDebt =
+            cache.scaledVariableDebt.rayMul(cache.nextVariableBorrowIndex);
 
         //calculate the stable debt until the last timestamp update
         vars.cumulatedStableInterest =
             MathUtils.getCompoundedIndex(
-                cache.currAvgStableBorrowRate,
+                cache.avgStableBorrowRate,
                 cache.stableDebtLastUpdateTimestamp,
                 cache.reserveLastUpdateTimestamp
             );
 
-        vars.prevTotalStableDebt =
-            cache.currPrincipalStableDebt.rayMul(vars.cumulatedStableInterest);
+        vars.previousTotalStableDebt =
+            cache.principalStableDebt.rayMul(vars.cumulatedStableInterest);
 
         //debt accrued is the sum of the current debt minus the sum of the debt at the last update
         vars.totalDebtAccrued =
-            vars.currTotalVariableDebt +
-            cache.currTotalStableDebt -
-            vars.prevTotalVariableDebt -
-            vars.prevTotalStableDebt;
+            vars.totalVariableDebt +
+            cache.totalStableDebt -
+            vars.previousTotalVariableDebt -
+            vars.previousTotalStableDebt;
 
         vars.amountToMint = vars.totalDebtAccrued.percentMul(cache.reserveFactor);
 
@@ -273,14 +273,14 @@ library ReserveLogic {
      */
     function updateIndexes(ReserveData storage data, ReserveCache memory cache) internal {
         // Only cumulating on the supply side if there is any income being produced
-        // The case of Reserve Factor 100% is not a problem (currentLiquidityRate == 0),
+        // The case of Reserve Factor 100% is not a problem (liquidityRate == 0),
         // as liquidity index should not be updated
-        if (cache.currLiquidityRate != 0) {
+        if (cache.liquidityRate != 0) {
             data.liquidityIndex =
                 (
                     cache.nextLiquidityIndex = getNextIndex({
-                        currentIndex  : cache.currLiquidityIndex,
-                        rate          : cache.currLiquidityRate,
+                        currentIndex  : cache.liquidityIndex,
+                        rate          : cache.liquidityRate,
                         lastTimestamp : cache.reserveLastUpdateTimestamp,
                         getIndex      : MathUtils.getLinearIndex
                     })
@@ -288,15 +288,15 @@ library ReserveLogic {
         }
 
         // Variable borrow index only gets updated if there is any variable debt.
-        // cache.currVariableBorrowRate != 0 is not a correct validation,
+        // cache.variableBorrowRate != 0 is not a correct validation,
         // because a positive base variable rate can be stored on
-        // cache.currVariableBorrowRate, but the index should not increase
-        if (cache.currScaledVariableDebt != 0) {
+        // cache.variableBorrowRate, but the index should not increase
+        if (cache.scaledVariableDebt != 0) {
             data.variableBorrowIndex =
                 (
                     cache.nextVariableBorrowIndex = getNextIndex({
-                        currentIndex  : cache.currVariableBorrowIndex,
-                        rate          : cache.currVariableBorrowRate,
+                        currentIndex  : cache.variableBorrowIndex,
+                        rate          : cache.variableBorrowRate,
                         lastTimestamp : cache.reserveLastUpdateTimestamp,
                         getIndex      : MathUtils.getCompoundedIndexToNow
                     })
@@ -322,30 +322,30 @@ library ReserveLogic {
     function cache(ReserveData storage data) internal view returns (ReserveCache memory cache) {
         cache.reserveConfiguration       = data.configuration;
         cache.reserveFactor              = cache.reserveConfiguration.getReserveFactor();
-        cache.currLiquidityIndex         = cache.nextLiquidityIndex = data.liquidityIndex;
-        cache.currVariableBorrowIndex    = cache.nextVariableBorrowIndex = data.variableBorrowIndex;
-        cache.currLiquidityRate          = data.currentLiquidityRate;
-        cache.currVariableBorrowRate     = data.currentVariableBorrowRate;
+        cache.liquidityIndex         = cache.nextLiquidityIndex = data.liquidityIndex;
+        cache.variableBorrowIndex    = cache.nextVariableBorrowIndex = data.variableBorrowIndex;
+        cache.liquidityRate          = data.liquidityRate;
+        cache.variableBorrowRate     = data.variableBorrowRate;
         cache.aToken                     = data.aToken;
         cache.reserveLastUpdateTimestamp = data.lastUpdateTimestamp;
         cache.variableDebtToken          = data.variableDebtToken;
         cache.stableDebtToken            = data.stableDebtToken;
 
-        cache.currScaledVariableDebt =
+        cache.scaledVariableDebt =
             cache.nextScaledVariableDebt =
                 IVariableDebtToken(cache.variableDebtToken).scaledTotalSupply();
 
         (
-            cache.currPrincipalStableDebt,
-            cache.currTotalStableDebt,
-            cache.currAvgStableBorrowRate,
+            cache.principalStableDebt,
+            cache.totalStableDebt,
+            cache.avgStableBorrowRate,
             cache.stableDebtLastUpdateTimestamp
         ) = IStableDebtToken(cache.stableDebtToken).getSupplyData();
 
         // by default the actions are considered as not affecting the debt balances.
         // if the action involves mint/burn of debt, the cache needs to be updated
-        cache.nextTotalStableDebt     = cache.currTotalStableDebt;
-        cache.nextAvgStableBorrowRate = cache.currAvgStableBorrowRate;
+        cache.nextTotalStableDebt     = cache.totalStableDebt;
+        cache.nextAvgStableBorrowRate = cache.avgStableBorrowRate;
     }
 
 }

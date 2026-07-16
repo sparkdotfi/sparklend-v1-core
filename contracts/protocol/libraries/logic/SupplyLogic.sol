@@ -76,13 +76,13 @@ library SupplyLogic {
         UserConfigurationMap             storage userConfig,
         ExecuteSupplyParams              memory  params
     ) external {
-        ReserveData storage reserve = reservesData[params.asset];
+        ReserveData storage reserveData = reservesData[params.asset];
 
-        ReserveCache memory reserveCache = reserve.cache();
+        ReserveCache memory reserveCache = reserveData.cache();
 
-        reserve.updateState(reserveCache);
-        ValidationLogic.validateSupply(reserveCache, reserve, params.amount);
-        reserve.updateInterestRates(reserveCache, params.asset, params.amount, 0);
+        reserveData.updateState(reserveCache);
+        ValidationLogic.validateSupply(reserveCache, reserveData, params.amount);
+        reserveData.updateInterestRates(reserveCache, params.asset, params.amount, 0);
 
         IERC20(params.asset).safeTransferFrom(msg.sender, reserveCache.aToken, params.amount);
 
@@ -104,7 +104,7 @@ library SupplyLogic {
                 reserveCache.aToken
             )
         ) {
-            userConfig.setUsingAsCollateral(reserve.id, true);
+            userConfig.setUsingAsCollateral(reserveData.id, true);
             emit ReserveUsedAsCollateralEnabled(params.asset, params.onBehalfOf);
         }
 
@@ -136,11 +136,11 @@ library SupplyLogic {
         UserConfigurationMap             storage userConfig,
         ExecuteWithdrawParams            memory  params
     ) external returns (uint256 withdrawal) {
-        ReserveData storage reserve = reservesData[params.asset];
+        ReserveData storage reserveData = reservesData[params.asset];
 
-        ReserveCache memory reserveCache = reserve.cache();
+        ReserveCache memory reserveCache = reserveData.cache();
 
-        reserve.updateState(reserveCache);
+        reserveData.updateState(reserveCache);
 
         uint256 userBalance =
             IAToken(reserveCache.aToken)
@@ -154,12 +154,12 @@ library SupplyLogic {
         }
 
         ValidationLogic.validateWithdraw(reserveCache, withdrawal, userBalance);
-        reserve.updateInterestRates(reserveCache, params.asset, 0, withdrawal);
+        reserveData.updateInterestRates(reserveCache, params.asset, 0, withdrawal);
 
-        bool isCollateral = userConfig.isUsingAsCollateral(reserve.id);
+        bool isCollateral = userConfig.isUsingAsCollateral(reserveData.id);
 
         if (isCollateral && withdrawal == userBalance) {
-            userConfig.setUsingAsCollateral(reserve.id, false);
+            userConfig.setUsingAsCollateral(reserveData.id, false);
 
             emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
         }
@@ -210,13 +210,13 @@ library SupplyLogic {
         mapping (address => UserConfigurationMap) storage usersConfig,
         FinalizeTransferParams                    memory  params
     ) external {
-        ReserveData storage reserve = reservesData[params.asset];
+        ReserveData storage reserveData = reservesData[params.asset];
 
-        ValidationLogic.validateTransfer(reserve);
+        ValidationLogic.validateTransfer(reserveData);
 
         if ((params.from == params.to) || (params.amount == 0)) return;
 
-        uint256 reserveId = reserve.id;
+        uint256 reserveId = reserveData.id;
 
         UserConfigurationMap storage fromConfig = usersConfig[params.from];
 
@@ -250,8 +250,8 @@ library SupplyLogic {
                     reservesData,
                     reservesList,
                     toConfig,
-                    reserve.configuration,
-                    reserve.aToken
+                    reserveData.configuration,
+                    reserveData.aToken
                 )
             ) {
                 toConfig.setUsingAsCollateral(reserveId, true);
@@ -292,15 +292,15 @@ library SupplyLogic {
         address                          priceOracle,
         uint8                            userEModeCategory
     ) external {
-        ReserveData storage reserve = reservesData[asset];
+        ReserveData storage reserveData = reservesData[asset];
 
-        ReserveCache memory reserveCache = reserve.cache();
+        ReserveCache memory reserveCache = reserveData.cache();
 
         uint256 userBalance = IERC20(reserveCache.aToken).balanceOf(msg.sender);
 
         ValidationLogic.validateSetUseReserveAsCollateral(reserveCache, userBalance);
 
-        if (useAsCollateral == userConfig.isUsingAsCollateral(reserve.id)) return;
+        if (useAsCollateral == userConfig.isUsingAsCollateral(reserveData.id)) return;
 
         if (useAsCollateral) {
             require(
@@ -313,11 +313,11 @@ library SupplyLogic {
                 Errors.USER_IN_ISOLATION_MODE_OR_LTV_ZERO
             );
 
-            userConfig.setUsingAsCollateral(reserve.id, true);
+            userConfig.setUsingAsCollateral(reserveData.id, true);
 
             emit ReserveUsedAsCollateralEnabled(asset, msg.sender);
         } else {
-            userConfig.setUsingAsCollateral(reserve.id, false);
+            userConfig.setUsingAsCollateral(reserveData.id, false);
 
             ValidationLogic.validateHFAndLtv(
                 reservesData,

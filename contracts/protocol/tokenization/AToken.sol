@@ -146,12 +146,12 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
         override(IncentivizedERC20, IERC20)
         returns (uint256)
     {
-        uint256 currentSupplyScaled = super.totalSupply();
+        uint256 supplyScaled = super.totalSupply();
 
         return
-            currentSupplyScaled == 0
+            supplyScaled == 0
                 ? 0
-                : currentSupplyScaled
+                : supplyScaled
                     .rayMul(IPool(POOL).getReserveNormalizedIncome(_underlyingAsset));
     }
 

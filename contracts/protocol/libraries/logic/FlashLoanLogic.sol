@@ -64,8 +64,8 @@ library FlashLoanLogic {
     struct FlashLoanLocalVars {
         IFlashLoanReceiver receiver;
         uint256            i;
-        address            currentAsset;
-        uint256            currentAmount;
+        address            asset;
+        uint256            amount;
         uint256[]          totalPremiums;
         uint256            premiumTotal;
         uint256            premiumToProtocol;
@@ -112,15 +112,15 @@ library FlashLoanLogic {
                 : ( params.premiumTotal, params.premiumToProtocol );
 
         for (vars.i = 0; vars.i < params.assets.length; vars.i++) {
-            vars.currentAmount = params.amounts[vars.i];
+            vars.amount = params.amounts[vars.i];
 
             vars.totalPremiums[vars.i] =
                 params.interestRateModes[vars.i] == uint8(InterestRateMode.NONE)
-                    ? vars.currentAmount.percentMul(vars.premiumTotal)
+                    ? vars.amount.percentMul(vars.premiumTotal)
                     : 0;
 
             IAToken(reservesData[params.assets[vars.i]].aToken)
-                .transferUnderlyingTo(params.recipient, vars.currentAmount);
+                .transferUnderlyingTo(params.recipient, vars.amount);
         }
 
         require(
@@ -135,19 +135,19 @@ library FlashLoanLogic {
         );
 
         for (vars.i = 0; vars.i < params.assets.length; vars.i++) {
-            vars.currentAsset  = params.assets[vars.i];
-            vars.currentAmount = params.amounts[vars.i];
+            vars.asset  = params.assets[vars.i];
+            vars.amount = params.amounts[vars.i];
 
             if (params.interestRateModes[vars.i] != uint8(InterestRateMode.NONE)) {
                 revert('FLASHLOAN_INTO_BORROW_DEPRECATED');
             }
 
             _handleFlashLoanRepayment(
-                reservesData[vars.currentAsset],
+                reservesData[vars.asset],
                 FlashLoanRepaymentParams({
-                    asset             : vars.currentAsset,
+                    asset             : vars.asset,
                     recipient         : params.recipient,
-                    amount            : vars.currentAmount,
+                    amount            : vars.amount,
                     totalPremium      : vars.totalPremiums[vars.i],
                     premiumToProtocol : vars.premiumToProtocol,
                     referralCode      : params.referralCode
@@ -164,11 +164,11 @@ library FlashLoanLogic {
      * @dev    At the end of the transaction the pool will pull amount borrowed + fee from the
      *         receiver, if the receiver have not approved the pool the transaction will revert.
      * @dev    Emits the `FlashLoan()` event
-     * @param  reserve The state of the flashloaned reserve
-     * @param  params  The additional parameters needed to execute the simple flashloan function
+     * @param  reserveData The state of the flashloaned reserve
+     * @param  params      The additional parameters needed to execute the simple flashloan function
      */
     function executeFlashLoanSimple(
-        ReserveData           storage reserve,
+        ReserveData           storage reserveData,
         FlashloanSimpleParams memory  params
     ) external {
         // For flashloans, the usual action flow
@@ -177,11 +177,11 @@ library FlashLoanLogic {
         // (validation -> user payload -> cache -> updateState -> changeState -> updateRates)
         // to protect against reentrance and rate manipulation within the user specified payload.
 
-        ValidationLogic.validateFlashloanSimple(reserve);
+        ValidationLogic.validateFlashloanSimple(reserveData);
 
         uint256 totalPremium = params.amount.percentMul(params.premiumTotal);
 
-        IAToken(reserve.aToken).transferUnderlyingTo(params.recipient, params.amount);
+        IAToken(reserveData.aToken).transferUnderlyingTo(params.recipient, params.amount);
 
         require(
             IFlashLoanSimpleReceiver(params.recipient)
@@ -196,7 +196,7 @@ library FlashLoanLogic {
         );
 
         _handleFlashLoanRepayment(
-            reserve,
+            reserveData,
             FlashLoanRepaymentParams({
                 asset             : params.asset,
                 recipient         : params.recipient,
@@ -211,32 +211,32 @@ library FlashLoanLogic {
     /**
      * @notice Handles repayment of flashloaned assets + premium
      * @dev    Will pull the amount + premium from the receiver, so must have approved pool
-     * @param  reserve The state of the flashloaned reserve
-     * @param  params  The additional parameters needed to execute the repayment function
+     * @param  reserveData The state of the flashloaned reserve
+     * @param  params      The additional parameters needed to execute the repayment function
      */
     function _handleFlashLoanRepayment(
-        ReserveData              storage reserve,
+        ReserveData              storage reserveData,
         FlashLoanRepaymentParams memory  params
     ) internal {
         uint256 premiumToProtocol = params.totalPremium.percentMul(params.premiumToProtocol);
         uint256 premiumToLP       = params.totalPremium - premiumToProtocol;
         uint256 amountPlusPremium = params.amount + params.totalPremium;
 
-        ReserveCache memory reserveCache = reserve.cache();
+        ReserveCache memory reserveCache = reserveData.cache();
 
-        reserve.updateState(reserveCache);
+        reserveData.updateState(reserveCache);
 
         reserveCache.nextLiquidityIndex =
-            reserve.cumulateToLiquidityIndex(
+            reserveData.cumulateToLiquidityIndex(
                 IERC20(reserveCache.aToken).totalSupply() +
-                uint256(reserve.accruedToTreasury).rayMul(reserveCache.nextLiquidityIndex),
+                uint256(reserveData.accruedToTreasury).rayMul(reserveCache.nextLiquidityIndex),
                 premiumToLP
             );
 
-        reserve.accruedToTreasury +=
+        reserveData.accruedToTreasury +=
             premiumToProtocol.rayDiv(reserveCache.nextLiquidityIndex).toUint128();
 
-        reserve.updateInterestRates(reserveCache, params.asset, amountPlusPremium, 0);
+        reserveData.updateInterestRates(reserveCache, params.asset, amountPlusPremium, 0);
 
         IERC20(params.asset).safeTransferFrom(
             params.recipient,
