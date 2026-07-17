@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.10;
 
-import { IERC20 } from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
+import { IERC20 }        from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
+import { SafeCast }      from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
 import { GPv2SafeERC20 } from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
-import { IStableDebtToken } from '../../../interfaces/IStableDebtToken.sol';
-import { IVariableDebtToken } from '../../../interfaces/IVariableDebtToken.sol';
+
+import { IStableDebtToken }             from '../../../interfaces/IStableDebtToken.sol';
+import { IVariableDebtToken }           from '../../../interfaces/IVariableDebtToken.sol';
 import { IReserveInterestRateStrategy } from '../../../interfaces/IReserveInterestRateStrategy.sol';
+import { IPool }                        from '../../../interfaces/IPool.sol';
+
 import { ReserveConfiguration } from '../configuration/ReserveConfiguration.sol';
-import { MathUtils } from '../math/MathUtils.sol';
-import { WadRayMath } from '../math/WadRayMath.sol';
-import { PercentageMath } from '../math/PercentageMath.sol';
-import { Errors } from '../helpers/Errors.sol';
+import { MathUtils }            from '../math/MathUtils.sol';
+import { WadRayMath }           from '../math/WadRayMath.sol';
+import { PercentageMath }       from '../math/PercentageMath.sol';
+import { Errors }               from '../helpers/Errors.sol';
 
 import {
     CalculateInterestRatesParams,
@@ -19,8 +23,6 @@ import {
     ReserveData
 } from '../types/DataTypes.sol';
 
-import { SafeCast } from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
-
 /**
  * @title  ReserveLogic library
  * @author Aave
@@ -28,22 +30,10 @@ import { SafeCast } from '../../../dependencies/openzeppelin/contracts/SafeCast.
  */
 library ReserveLogic {
 
-    using WadRayMath           for uint256;
-    using PercentageMath       for uint256;
-    using SafeCast             for uint256;
-    using GPv2SafeERC20        for IERC20;
-    using ReserveLogic         for ReserveData;
-    using ReserveConfiguration for ReserveConfigurationMap;
-
-    // See `IPool` for descriptions
-    event ReserveDataUpdated(
-        address indexed reserve,
-        uint256         liquidityRate,
-        uint256         stableBorrowRate,
-        uint256         variableBorrowRate,
-        uint256         liquidityIndex,
-        uint256         variableBorrowIndex
-    );
+    using WadRayMath     for uint256;
+    using PercentageMath for uint256;
+    using SafeCast       for uint256;
+    using GPv2SafeERC20  for IERC20;
 
     /**
      * @notice Returns the ongoing normalized income for the reserve.
@@ -55,7 +45,8 @@ library ReserveLogic {
     function getNormalizedIncome(ReserveData storage data) internal view returns (uint256) {
         uint40 timestamp = data.lastUpdateTimestamp;
 
-        // if the index was updated in the same block, no need to perform any calculation
+        // If the index was already updated in the same block, return the stored index directly.
+        // Otherwise, calculate the ongoing linear index interest accrued since the last update.
         //solium-disable-next-line
         return timestamp == block.timestamp
             ? data.liquidityIndex
@@ -63,7 +54,7 @@ library ReserveLogic {
                     currentIndex  : data.liquidityIndex,
                     rate          : data.liquidityRate,
                     lastTimestamp : timestamp,
-                    getIndex      : MathUtils.getLinearIndex
+                    getIndex      : MathUtils.getLinearIndexToNow
                 });
     }
 
@@ -119,8 +110,9 @@ library ReserveLogic {
         uint256             totalLiquidity,
         uint256             amount
     ) internal returns (uint256 liquidityIndex) {
-        //next liquidity index is calculated this way: `((amount / totalLiquidity) + 1) * liquidityIndex`
-        //division `amount / totalLiquidity` done in ray for precision
+        // next liquidity index is calculated as: `((amount / totalLiquidity) + 1) * liquidityIndex`
+        // division `amount / totalLiquidity` is done in ray for precision
+        // This spreads the accrued fee (amount) across all existing LPs by proportionally inflating the liquidity index.
         liquidityIndex =
             (
                 amount.wadToRay().rayDiv(totalLiquidity.wadToRay()) + WadRayMath.RAY
@@ -181,20 +173,20 @@ library ReserveLogic {
         UpdateInterestRatesLocalVars memory vars;
 
         vars.totalVariableDebt =
-            cache.nextScaledVariableDebt.rayMul(cache.nextVariableBorrowIndex);
+            cache.scaledVariableDebt.rayMul(cache.variableBorrowIndex);
 
         ( vars.nextLiquidityRate, vars.nextStableRate, vars.nextVariableRate ) =
             IReserveInterestRateStrategy(data.interestRateStrategy).calculateInterestRates(
                 CalculateInterestRatesParams({
-                    unbacked                : data.unbacked,
-                    liquidityAdded          : liquidityAdded,
-                    liquidityTaken          : liquidityTaken,
-                    totalStableDebt         : cache.nextTotalStableDebt,
-                    totalVariableDebt       : vars.totalVariableDebt,
-                    averageStableBorrowRate : cache.nextAvgStableBorrowRate,
-                    reserveFactor           : cache.reserveFactor,
-                    reserve                 : reserve,
-                    aToken                  : cache.aToken
+                    unbacked            : data.unbacked,
+                    liquidityAdded      : liquidityAdded,
+                    liquidityTaken      : liquidityTaken,
+                    totalStableDebt     : cache.totalStableDebt,
+                    totalVariableDebt   : vars.totalVariableDebt,
+                    avgStableBorrowRate : cache.avgStableBorrowRate,
+                    reserveFactor       : cache.reserveFactor,
+                    reserve             : reserve,
+                    aToken              : cache.aToken
                 })
             );
 
@@ -202,13 +194,13 @@ library ReserveLogic {
         data.stableBorrowRate   = vars.nextStableRate.toUint128();
         data.variableBorrowRate = vars.nextVariableRate.toUint128();
 
-        emit ReserveDataUpdated(
+        emit IPool.ReserveDataUpdated(
             reserve,
             vars.nextLiquidityRate,
             vars.nextStableRate,
             vars.nextVariableRate,
-            cache.nextLiquidityIndex,
-            cache.nextVariableBorrowIndex
+            cache.liquidityIndex,
+            cache.variableBorrowIndex
         );
     }
 
@@ -230,20 +222,21 @@ library ReserveLogic {
     function accrueToTreasury(ReserveData storage data, ReserveCache memory cache) internal {
         AccrueToTreasuryLocalVars memory vars;
 
+        // If the reserve factor is 0, no interest is redirected to the protocol treasury
         if (cache.reserveFactor == 0) return;
 
-        //calculate the total variable debt at moment of the last interaction
+        // 1. Calculate the total variable debt at the moment of the last interaction
         vars.previousTotalVariableDebt =
-            cache.scaledVariableDebt.rayMul(cache.variableBorrowIndex);
+            cache.startingScaledVariableDebt.rayMul(cache.startingVariableBorrowIndex);
 
-        //calculate the new total variable debt after accumulation of the interest on the index
+        // 2. Calculate the new total variable debt after compounding the variable index up to the current block
         vars.totalVariableDebt =
-            cache.scaledVariableDebt.rayMul(cache.nextVariableBorrowIndex);
+            cache.startingScaledVariableDebt.rayMul(cache.variableBorrowIndex);
 
-        //calculate the stable debt until the last timestamp update
+        // 3. Compounded stable interest index since the last update
         vars.cumulatedStableInterest =
             MathUtils.getCompoundedIndex(
-                cache.avgStableBorrowRate,
+                cache.startingAvgStableBorrowRate,
                 cache.stableDebtLastUpdateTimestamp,
                 cache.reserveLastUpdateTimestamp
             );
@@ -251,19 +244,22 @@ library ReserveLogic {
         vars.previousTotalStableDebt =
             cache.principalStableDebt.rayMul(vars.cumulatedStableInterest);
 
-        //debt accrued is the sum of the current debt minus the sum of the debt at the last update
+        // 4. Calculate total debt accrued (interest accumulated) on both stable and variable borrow sides
         vars.totalDebtAccrued =
             vars.totalVariableDebt +
-            cache.totalStableDebt -
+            cache.startingTotalStableDebt -
             vars.previousTotalVariableDebt -
             vars.previousTotalStableDebt;
 
+        // 5. The protocol's share of interest is calculated using the reserve factor percentage (in BPS)
         vars.amountToMint = vars.totalDebtAccrued.percentMul(cache.reserveFactor);
 
         if (vars.amountToMint == 0) return;
 
+        // 6. Convert the minted fee value into a scaled representation by dividing by the next liquidity index,
+        // and register it as accruedToTreasury so it can be minted as aTokens later.
         data.accruedToTreasury +=
-            vars.amountToMint.rayDiv(cache.nextLiquidityIndex).toUint128();
+            vars.amountToMint.rayDiv(cache.liquidityIndex).toUint128();
     }
 
     /**
@@ -278,11 +274,11 @@ library ReserveLogic {
         if (cache.liquidityRate != 0) {
             data.liquidityIndex =
                 (
-                    cache.nextLiquidityIndex = getNextIndex({
+                    cache.liquidityIndex = getNextIndex({
                         currentIndex  : cache.liquidityIndex,
                         rate          : cache.liquidityRate,
                         lastTimestamp : cache.reserveLastUpdateTimestamp,
-                        getIndex      : MathUtils.getLinearIndex
+                        getIndex      : MathUtils.getLinearIndexToNow
                     })
                 ).toUint128();
         }
@@ -291,11 +287,11 @@ library ReserveLogic {
         // cache.variableBorrowRate != 0 is not a correct validation,
         // because a positive base variable rate can be stored on
         // cache.variableBorrowRate, but the index should not increase
-        if (cache.scaledVariableDebt != 0) {
+        if (cache.startingScaledVariableDebt != 0) {
             data.variableBorrowIndex =
                 (
-                    cache.nextVariableBorrowIndex = getNextIndex({
-                        currentIndex  : cache.variableBorrowIndex,
+                    cache.variableBorrowIndex = getNextIndex({
+                        currentIndex  : cache.startingVariableBorrowIndex,
                         rate          : cache.variableBorrowRate,
                         lastTimestamp : cache.reserveLastUpdateTimestamp,
                         getIndex      : MathUtils.getCompoundedIndexToNow
@@ -320,32 +316,37 @@ library ReserveLogic {
      * @return cache The cache object
      */
     function cache(ReserveData storage data) internal view returns (ReserveCache memory cache) {
-        cache.reserveConfiguration       = data.configuration;
-        cache.reserveFactor              = cache.reserveConfiguration.getReserveFactor();
-        cache.liquidityIndex         = cache.nextLiquidityIndex = data.liquidityIndex;
-        cache.variableBorrowIndex    = cache.nextVariableBorrowIndex = data.variableBorrowIndex;
-        cache.liquidityRate          = data.liquidityRate;
-        cache.variableBorrowRate     = data.variableBorrowRate;
-        cache.aToken                     = data.aToken;
-        cache.reserveLastUpdateTimestamp = data.lastUpdateTimestamp;
-        cache.variableDebtToken          = data.variableDebtToken;
-        cache.stableDebtToken            = data.stableDebtToken;
+        // Pre-fill the cache object with basic reserve config parameters to avoid repeating storage reads (SLOAD)
+        cache.configuration               = data.configuration;
+        cache.reserveFactor               = ReserveConfiguration.getReserveFactor(cache.configuration);
+        cache.startingLiquidityIndex      = data.liquidityIndex;
+        cache.startingVariableBorrowIndex = data.variableBorrowIndex;
+        cache.liquidityRate               = data.liquidityRate;
+        cache.variableBorrowRate          = data.variableBorrowRate;
+        cache.aToken                      = data.aToken;
+        cache.reserveLastUpdateTimestamp  = data.lastUpdateTimestamp;
+        cache.variableDebtToken           = data.variableDebtToken;
+        cache.stableDebtToken             = data.stableDebtToken;
 
-        cache.scaledVariableDebt =
-            cache.nextScaledVariableDebt =
-                IVariableDebtToken(cache.variableDebtToken).scaledTotalSupply();
+        // Perform external contract calls to get variable debt scaled total supply and stable supply statistics
+        cache.startingScaledVariableDebt =
+            IVariableDebtToken(cache.variableDebtToken).scaledTotalSupply();
 
         (
             cache.principalStableDebt,
-            cache.totalStableDebt,
-            cache.avgStableBorrowRate,
+            cache.startingTotalStableDebt,
+            cache.startingAvgStableBorrowRate,
             cache.stableDebtLastUpdateTimestamp
         ) = IStableDebtToken(cache.stableDebtToken).getSupplyData();
 
-        // by default the actions are considered as not affecting the debt balances.
-        // if the action involves mint/burn of debt, the cache needs to be updated
-        cache.nextTotalStableDebt     = cache.totalStableDebt;
-        cache.nextAvgStableBorrowRate = cache.avgStableBorrowRate;
+
+        // By default, the actions are considered as not affecting the debt balances.
+        // If the action involves minting or burning debt, the cache needs to be updated manually in logic flows.
+        cache.liquidityIndex      = cache.startingLiquidityIndex;
+        cache.scaledVariableDebt  = cache.startingScaledVariableDebt;
+        cache.totalStableDebt     = cache.startingTotalStableDebt;
+        cache.avgStableBorrowRate = cache.startingAvgStableBorrowRate;
+        cache.variableBorrowIndex = cache.startingVariableBorrowIndex;
     }
 
 }

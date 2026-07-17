@@ -15,9 +15,9 @@ struct ReserveData {
     // the current stable borrow rate. Expressed in ray
     uint128 stableBorrowRate;
     // timestamp of last update
-    uint40 lastUpdateTimestamp;
+    uint40  lastUpdateTimestamp;
     // the id of the reserve. Represents the position in the list of the active reserves
-    uint16 id;
+    uint16  id;
     // aToken address
     address aToken;
     // stableDebtToken address
@@ -84,21 +84,21 @@ enum InterestRateMode {
 }
 
 struct ReserveCache {
+    uint256 startingScaledVariableDebt;
     uint256 scaledVariableDebt;
-    uint256 nextScaledVariableDebt;
     uint256 principalStableDebt;
+    uint256 startingAvgStableBorrowRate;
+    uint256 startingTotalStableDebt;
     uint256 avgStableBorrowRate;
     uint256 totalStableDebt;
-    uint256 nextAvgStableBorrowRate;
-    uint256 nextTotalStableDebt;
+    uint256 startingLiquidityIndex;
     uint256 liquidityIndex;
-    uint256 nextLiquidityIndex;
+    uint256 startingVariableBorrowIndex;
     uint256 variableBorrowIndex;
-    uint256 nextVariableBorrowIndex;
     uint256 liquidityRate;
     uint256 variableBorrowRate;
     uint256 reserveFactor;
-    ReserveConfigurationMap reserveConfiguration;
+    ReserveConfigurationMap configuration;
     address aToken;
     address stableDebtToken;
     address variableDebtToken;
@@ -250,7 +250,7 @@ struct CalculateInterestRatesParams {
     uint256 liquidityTaken;
     uint256 totalStableDebt;
     uint256 totalVariableDebt;
-    uint256 averageStableBorrowRate;
+    uint256 avgStableBorrowRate;
     uint256 reserveFactor;
     address reserve;
     address aToken;

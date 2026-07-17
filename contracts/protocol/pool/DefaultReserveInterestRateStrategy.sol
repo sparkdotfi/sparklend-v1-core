@@ -184,18 +184,23 @@ contract DefaultReserveInterestRateStrategy is IDefaultInterestRateStrategy {
 
             vars.availableLiquidityPlusDebt = vars.availableLiquidity + vars.totalDebt;
 
+            // Calculate borrow usage ratio (utilization rate): total debt divided by total liquidity
             vars.borrowUsageRatio = vars.totalDebt.rayDiv(vars.availableLiquidityPlusDebt);
 
+            // Calculate supply usage ratio: includes unbacked minted tokens in the denominator
             vars.supplyUsageRatio =
                 vars.totalDebt.rayDiv(vars.availableLiquidityPlusDebt + params.unbacked);
         }
 
+        // Two-Slope Interest Rate Model:
+        // 1. If usage ratio is above optimal, borrow rate increases sharply using slope2 to incentivize deposits and repayments.
+        // 2. If usage ratio is below optimal, borrow rate increases moderately using slope1.
         if (vars.borrowUsageRatio > OPTIMAL_USAGE_RATIO) {
             uint256 excessBorrowUsageRatio =
                 (vars.borrowUsageRatio - OPTIMAL_USAGE_RATIO).rayDiv(MAX_EXCESS_USAGE_RATIO);
 
             vars.stableBorrowRate +=
-                _stableRateSlope1 +_stableRateSlope2.rayMul(excessBorrowUsageRatio);
+                _stableRateSlope1 + _stableRateSlope2.rayMul(excessBorrowUsageRatio);
 
             vars.variableBorrowRate +=
                 _variableRateSlope1 + _variableRateSlope2.rayMul(excessBorrowUsageRatio);
@@ -207,6 +212,8 @@ contract DefaultReserveInterestRateStrategy is IDefaultInterestRateStrategy {
                 _variableRateSlope1.rayMul(vars.borrowUsageRatio).rayDiv(OPTIMAL_USAGE_RATIO);
         }
 
+        // If stable debt makes up too large of a percentage of the total pool debt, apply an additional surcharge
+        // to disincentivize further stable borrowing and mitigate pool rate locking risk.
         if (vars.stableToTotalDebtRatio > OPTIMAL_STABLE_TO_TOTAL_DEBT_RATIO) {
             uint256 excessStableDebtRatio =
                 (vars.stableToTotalDebtRatio - OPTIMAL_STABLE_TO_TOTAL_DEBT_RATIO)
@@ -215,12 +222,14 @@ contract DefaultReserveInterestRateStrategy is IDefaultInterestRateStrategy {
             vars.stableBorrowRate += _stableRateExcessOffset.rayMul(excessStableDebtRatio);
         }
 
+        // Supply APY (liquidityRate) is the weighted average borrow rate multiplied by utilization (supplyUsageRatio),
+        // minus the protocol reserve factor share which is collected by the treasury.
         vars.liquidityRate =
             _getOverallBorrowRate(
                 params.totalStableDebt,
                 params.totalVariableDebt,
                 vars.variableBorrowRate,
-                params.averageStableBorrowRate
+                params.avgStableBorrowRate
             )
                 .rayMul(vars.supplyUsageRatio)
                 .percentMul(PercentageMath.PERCENTAGE_FACTOR - params.reserveFactor);
@@ -235,24 +244,25 @@ contract DefaultReserveInterestRateStrategy is IDefaultInterestRateStrategy {
     /**
      * @dev    Calculates the overall borrow rate as the weighted average between the total variable
      *         debt and total stable debt
-     * @param  totalStableDebt         The total borrowed from the reserve at a stable rate
-     * @param  totalVariableDebt       The total borrowed from the reserve at a variable rate
-     * @param  variableBorrowRate      The current variable borrow rate of the reserve
-     * @param  averageStableBorrowRate The current weighted average of all the stable rate loans
-     * @return rate                    The weighted averaged borrow rate
+     * @param  totalStableDebt     The total borrowed from the reserve at a stable rate
+     * @param  totalVariableDebt   The total borrowed from the reserve at a variable rate
+     * @param  variableBorrowRate  The current variable borrow rate of the reserve
+     * @param  avgStableBorrowRate The current weighted average of all the stable rate loans
+     * @return rate                The weighted averaged borrow rate
      */
     function _getOverallBorrowRate(
         uint256 totalStableDebt,
         uint256 totalVariableDebt,
         uint256 variableBorrowRate,
-        uint256 averageStableBorrowRate
+        uint256 avgStableBorrowRate
     ) internal pure returns (uint256) {
         uint256 totalDebt = totalStableDebt + totalVariableDebt;
 
         if (totalDebt == 0) return 0;
 
+        // Calculate weighted average rate: (totalVariableDebt * variableRate + totalStableDebt * averageStableRate) / totalDebt
         uint256 weightedVariableRate = totalVariableDebt.wadToRay().rayMul(variableBorrowRate);
-        uint256 weightedStableRate   = totalStableDebt.wadToRay().rayMul(averageStableBorrowRate);
+        uint256 weightedStableRate   = totalStableDebt.wadToRay().rayMul(avgStableBorrowRate);
 
         return (weightedVariableRate + weightedStableRate).rayDiv(totalDebt.wadToRay());
     }

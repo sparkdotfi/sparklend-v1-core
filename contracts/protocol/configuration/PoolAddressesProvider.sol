@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.10;
 
-import { Ownable }                from '../../dependencies/openzeppelin/contracts/Ownable.sol';
+import { Ownable } from '../../dependencies/openzeppelin/contracts/Ownable.sol';
+
 import { IPoolAddressesProvider } from '../../interfaces/IPoolAddressesProvider.sol';
 
 import {
@@ -15,7 +16,7 @@ import {
  * @dev    Acts as factory of proxies and admin of those, so with right to change its implementations
  * @dev    Owned by the Aave Governance
  */
-contract PoolAddressesProvider is Ownable, IPoolAddressesProvider {
+contract PoolAddressesProvider is IPoolAddressesProvider, Ownable {
 
     // Identifier of the Aave Market
     string private _marketId;

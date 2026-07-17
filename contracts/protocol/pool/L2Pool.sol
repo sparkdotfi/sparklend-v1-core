@@ -22,6 +22,8 @@ contract L2Pool is Pool, IL2Pool {
 
   /// @inheritdoc IL2Pool
   function supply(bytes32 args) external override {
+    // Decode parameters packed into a single bytes32 to save rollup gas on L2.
+    // The unpacked params are then forwarded to the standard Pool.supply function.
     (address asset, uint256 amount, uint16 referralCode) = CalldataLogic.decodeSupplyParams(
       _reservesList,
       args

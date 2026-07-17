@@ -37,7 +37,7 @@ contract BaseImmutableAdminUpgradeabilityProxy is BaseUpgradeabilityProxy {
 
     /**
      * @notice Return the admin address
-     * @return The address of the proxy admin.
+     * @return admin The address of the proxy admin.
      */
     function admin() external ifAdmin returns (address) {
         return _admin;

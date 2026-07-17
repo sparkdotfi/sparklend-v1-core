@@ -15,11 +15,12 @@ import { IAToken }                      from '../../../interfaces/IAToken.sol';
 import { IPriceOracleSentinel }         from '../../../interfaces/IPriceOracleSentinel.sol';
 import { IPool }                        from '../../../interfaces/IPool.sol';
 import { IPoolAddressesProvider }       from '../../../interfaces/IPoolAddressesProvider.sol';
-import { ReserveConfiguration }         from '../configuration/ReserveConfiguration.sol';
-import { UserConfiguration }            from '../configuration/UserConfiguration.sol';
-import { Errors }                       from '../helpers/Errors.sol';
-import { WadRayMath }                   from '../math/WadRayMath.sol';
-import { PercentageMath }               from '../math/PercentageMath.sol';
+
+import { ReserveConfiguration } from '../configuration/ReserveConfiguration.sol';
+import { UserConfiguration }    from '../configuration/UserConfiguration.sol';
+import { Errors }               from '../helpers/Errors.sol';
+import { WadRayMath }           from '../math/WadRayMath.sol';
+import { PercentageMath }       from '../math/PercentageMath.sol';
 
 import {
     CalculateInterestRatesParams,
@@ -45,14 +46,11 @@ import { IncentivizedERC20 } from '../../tokenization/base/IncentivizedERC20.sol
  */
 library ValidationLogic {
 
-    using ReserveLogic         for ReserveData;
-    using WadRayMath           for uint256;
-    using PercentageMath       for uint256;
-    using SafeCast             for uint256;
-    using GPv2SafeERC20        for IERC20;
-    using ReserveConfiguration for ReserveConfigurationMap;
-    using UserConfiguration    for UserConfigurationMap;
-    using Address              for address;
+    using WadRayMath     for uint256;
+    using PercentageMath for uint256;
+    using SafeCast       for uint256;
+    using GPv2SafeERC20  for IERC20;
+    using Address        for address;
 
     // Factor to apply to "only-variable-debt" liquidity rate to get threshold for rebalancing,
     // expressed in bps. A value of 0.9e4 results in 90%
@@ -75,36 +73,40 @@ library ValidationLogic {
     /**
      * @notice Validates a supply action.
      * @param  reserveCache The cached data of the reserve
+     * @param  reserveData  The data of the reserve
      * @param  amount       The amount to be supplied
      */
     function validateSupply(
         ReserveCache memory  reserveCache,
-        ReserveData  storage reserve,
+        ReserveData  storage reserveData,
         uint256              amount
     ) internal view {
         require(amount != 0, Errors.INVALID_AMOUNT);
 
         ( bool isActive, bool isFrozen, , , bool isPaused ) =
-            reserveCache.reserveConfiguration.getFlags();
+            ReserveConfiguration.getFlags(reserveCache.configuration);
 
         require(isActive,  Errors.RESERVE_INACTIVE);
         require(!isPaused, Errors.RESERVE_PAUSED);
         require(!isFrozen, Errors.RESERVE_FROZEN);
 
-        uint256 supplyCap = reserveCache.reserveConfiguration.getSupplyCap();
+        uint256 supplyCap = ReserveConfiguration.getSupplyCap(reserveCache.configuration);
 
+        // If a supply cap is configured, verify that:
+        // (total active aToken supply + accrued protocol fees + new supply amount) <= supplyCap (scaled by decimals)
         require(
             (
                 supplyCap == 0
             ) ||
             (
                 (
-                (
-                    IAToken(reserveCache.aToken).scaledTotalSupply() + reserve.accruedToTreasury
-                ).rayMul(reserveCache.nextLiquidityIndex) +
-                amount
+                    (
+                        IAToken(reserveCache.aToken).scaledTotalSupply() +
+                        reserveData.accruedToTreasury
+                    ).rayMul(reserveCache.liquidityIndex) +
+                    amount
                 ) <=
-                (supplyCap * (10 ** reserveCache.reserveConfiguration.getDecimals()))
+                (supplyCap * (10 ** ReserveConfiguration.getDecimals(reserveCache.configuration)))
             ),
             Errors.SUPPLY_CAP_EXCEEDED
         );
@@ -124,7 +126,8 @@ library ValidationLogic {
         require(amount != 0,           Errors.INVALID_AMOUNT);
         require(amount <= userBalance, Errors.NOT_ENOUGH_AVAILABLE_USER_BALANCE);
 
-        ( bool isActive, , , , bool isPaused ) = reserveCache.reserveConfiguration.getFlags();
+        ( bool isActive, , , , bool isPaused ) =
+            ReserveConfiguration.getFlags(reserveCache.configuration);
 
         require(isActive,  Errors.RESERVE_INACTIVE);
         require(!isPaused, Errors.RESERVE_PAUSED);
@@ -176,7 +179,7 @@ library ValidationLogic {
             vars.borrowingEnabled,
             vars.stableRateBorrowingEnabled,
             vars.isPaused
-        ) = params.reserveCache.reserveConfiguration.getFlags();
+        ) = ReserveConfiguration.getFlags(params.reserveCache.configuration);
 
         require(vars.isActive,         Errors.RESERVE_INACTIVE);
         require(!vars.isPaused,        Errors.RESERVE_PAUSED);
@@ -196,21 +199,23 @@ library ValidationLogic {
             Errors.INVALID_INTEREST_RATE_MODE_SELECTED
         );
 
-        vars.reserveDecimals = params.reserveCache.reserveConfiguration.getDecimals();
-        vars.borrowCap       = params.reserveCache.reserveConfiguration.getBorrowCap();
+        vars.reserveDecimals = ReserveConfiguration.getDecimals(params.reserveCache.configuration);
+        vars.borrowCap       = ReserveConfiguration.getBorrowCap(params.reserveCache.configuration);
 
         unchecked {
             vars.assetUnit = 10 ** vars.reserveDecimals;
         }
 
+        // If a borrow cap is configured, check that:
+        // (total variable debt + total stable debt + new borrow amount) <= borrowCap (scaled by decimals)
         if (vars.borrowCap != 0) {
             vars.totalSupplyVariableDebt =
-                params.reserveCache.scaledVariableDebt.rayMul(
-                    params.reserveCache.nextVariableBorrowIndex
+                params.reserveCache.startingScaledVariableDebt.rayMul(
+                    params.reserveCache.variableBorrowIndex
                 );
 
             vars.totalDebt =
-                params.reserveCache.totalStableDebt +
+                params.reserveCache.startingTotalStableDebt +
                 vars.totalSupplyVariableDebt +
                 params.amount;
 
@@ -223,10 +228,12 @@ library ValidationLogic {
         }
 
         if (params.isolationModeActive) {
-            // check that the asset being borrowed is borrowable in isolation mode AND the total
-            // exposure is no bigger than the collateral debt ceiling
+            // In isolation mode:
+            // 1. The asset being borrowed must be explicitly flagged as borrowable in isolation mode.
+            // 2. The isolation total debt (scaled to the custom debt ceiling decimals) plus the new borrow amount
+            //    must not exceed the collateral asset's debt ceiling.
             require(
-                params.reserveCache.reserveConfiguration.getBorrowableInIsolation(),
+                ReserveConfiguration.getBorrowableInIsolation(params.reserveCache.configuration),
                 Errors.ASSET_NOT_BORROWABLE_IN_ISOLATION
             );
 
@@ -244,8 +251,9 @@ library ValidationLogic {
         }
 
         if (params.userEModeCategory != 0) {
+            // In Efficiency Mode (EMode): The borrowed asset must belong to the user's active EMode category.
             require(
-                params.reserveCache.reserveConfiguration.getEModeCategory() ==
+                ReserveConfiguration.getEModeCategory(params.reserveCache.configuration) ==
                 params.userEModeCategory,
                 Errors.INCONSISTENT_EMODE_CATEGORY
             );
@@ -308,9 +316,14 @@ library ValidationLogic {
 
             require(vars.stableRateBorrowingEnabled, Errors.STABLE_BORROWING_NOT_ENABLED);
 
+            // Abuses prevention: Users cannot borrow the same asset they supplied as collateral unless:
+            // 1. The LTV is 0
+            // 2. The borrow amount is strictly greater than their aToken balance (i.e. they are borrowing more than they supplied)
             require(
-                !params.userConfig.isUsingAsCollateral(reservesData[params.asset].id) ||
-                (params.reserveCache.reserveConfiguration.getLtv() == 0) ||
+                !UserConfiguration.isUsingAsCollateral(
+                    params.userConfig, reservesData[params.asset].id
+                ) ||
+                (ReserveConfiguration.getLtv(params.reserveCache.configuration) == 0) ||
                 (params.amount > IERC20(params.reserveCache.aToken).balanceOf(params.userAddress)),
                 Errors.COLLATERAL_SAME_AS_BORROWING_CURRENCY
             );
@@ -325,16 +338,23 @@ library ValidationLogic {
             );
         }
 
-        if (!params.userConfig.isBorrowingAny()) return;
+        if (!UserConfiguration.isBorrowingAny(params.userConfig)) return;
 
+        // Siloed Borrowing checks:
+        // A user borrowing a siloed asset cannot borrow any other asset.
+        // A user borrowing other assets cannot borrow a siloed asset.
         ( vars.siloedBorrowingEnabled, vars.siloedBorrowingAddress ) =
-            params.userConfig.getSiloedBorrowingState(reservesData, reservesList);
+            UserConfiguration.getSiloedBorrowingState(
+                params.userConfig,
+                reservesData,
+                reservesList
+            );
 
         if (vars.siloedBorrowingEnabled) {
             require(vars.siloedBorrowingAddress == params.asset, Errors.SILOED_BORROWING_VIOLATION);
         } else {
             require(
-                !params.reserveCache.reserveConfiguration.getSiloedBorrowing(),
+                !ReserveConfiguration.getSiloedBorrowing(params.reserveCache.configuration),
                 Errors.SILOED_BORROWING_VIOLATION
             );
         }
@@ -364,7 +384,8 @@ library ValidationLogic {
             Errors.NO_EXPLICIT_AMOUNT_TO_REPAY_ON_BEHALF
         );
 
-        ( bool isActive, , , , bool isPaused ) = reserveCache.reserveConfiguration.getFlags();
+        ( bool isActive, , , , bool isPaused ) =
+            ReserveConfiguration.getFlags(reserveCache.configuration);
 
         require(isActive,  Errors.RESERVE_INACTIVE);
         require(!isPaused, Errors.RESERVE_PAUSED);
@@ -394,7 +415,7 @@ library ValidationLogic {
         InterestRateMode             rateMode
     ) internal view {
         ( bool isActive, bool isFrozen, , bool stableRateEnabled, bool isPaused ) =
-            reserveCache.reserveConfiguration.getFlags();
+            ReserveConfiguration.getFlags(reserveCache.configuration);
 
         require(isActive,  Errors.RESERVE_INACTIVE);
         require(!isPaused, Errors.RESERVE_PAUSED);
@@ -419,8 +440,8 @@ library ValidationLogic {
             require(stableRateEnabled, Errors.STABLE_BORROWING_NOT_ENABLED);
 
             require(
-                !userConfig.isUsingAsCollateral(reserveData.id) ||
-                (reserveCache.reserveConfiguration.getLtv() == 0) ||
+                !UserConfiguration.isUsingAsCollateral(userConfig, reserveData.id) ||
+                (ReserveConfiguration.getLtv(reserveCache.configuration) == 0) ||
                 (stableDebt + variableDebt > IERC20(reserveCache.aToken).balanceOf(msg.sender)),
                 Errors.COLLATERAL_SAME_AS_BORROWING_CURRENCY
             );
@@ -445,7 +466,8 @@ library ValidationLogic {
         ReserveCache memory  reserveCache,
         address              reserve
     ) internal view {
-        ( bool isActive, , , , bool isPaused ) = reserveCache.reserveConfiguration.getFlags();
+        ( bool isActive, , , , bool isPaused ) =
+            ReserveConfiguration.getFlags(reserveCache.configuration);
 
         require(isActive,  Errors.RESERVE_INACTIVE);
         require(!isPaused, Errors.RESERVE_PAUSED);
@@ -458,15 +480,15 @@ library ValidationLogic {
             IReserveInterestRateStrategy(reserveData.interestRateStrategy)
                 .calculateInterestRates(
                     CalculateInterestRatesParams({
-                        unbacked                : reserveData.unbacked,
-                        liquidityAdded          : 0,
-                        liquidityTaken          : 0,
-                        totalStableDebt         : 0,
-                        totalVariableDebt       : totalDebt,
-                        averageStableBorrowRate : 0,
-                        reserveFactor           : reserveCache.reserveFactor,
-                        reserve                 : reserve,
-                        aToken                  : reserveCache.aToken
+                        unbacked            : reserveData.unbacked,
+                        liquidityAdded      : 0,
+                        liquidityTaken      : 0,
+                        totalStableDebt     : 0,
+                        totalVariableDebt   : totalDebt,
+                        avgStableBorrowRate : 0,
+                        reserveFactor       : reserveCache.reserveFactor,
+                        reserve             : reserve,
+                        aToken              : reserveCache.aToken
                     })
             );
 
@@ -488,7 +510,8 @@ library ValidationLogic {
     ) internal pure {
         require(userBalance != 0, Errors.UNDERLYING_BALANCE_ZERO);
 
-        ( bool isActive, , , , bool isPaused ) = reserveCache.reserveConfiguration.getFlags();
+        ( bool isActive, , , , bool isPaused ) =
+            ReserveConfiguration.getFlags(reserveCache.configuration);
 
         require(isActive,  Errors.RESERVE_INACTIVE);
         require(!isPaused, Errors.RESERVE_PAUSED);
@@ -519,9 +542,9 @@ library ValidationLogic {
     function validateFlashloanSimple(ReserveData storage reserveData) internal view {
         ReserveConfigurationMap memory configuration = reserveData.configuration;
 
-        require(!configuration.getPaused(),          Errors.RESERVE_PAUSED);
-        require(configuration.getActive(),           Errors.RESERVE_INACTIVE);
-        require(configuration.getFlashLoanEnabled(), Errors.FLASHLOAN_DISABLED);
+        require(!ReserveConfiguration.getPaused(configuration),          Errors.RESERVE_PAUSED);
+        require(ReserveConfiguration.getActive(configuration),           Errors.RESERVE_INACTIVE);
+        require(ReserveConfiguration.getFlashLoanEnabled(configuration), Errors.FLASHLOAN_DISABLED);
     }
 
     struct ValidateLiquidationCallLocalVars {
@@ -546,10 +569,10 @@ library ValidationLogic {
         ValidateLiquidationCallLocalVars memory vars;
 
         ( vars.collateralReserveActive, , , , vars.collateralReservePaused ) =
-            reserveData.configuration.getFlags();
+            ReserveConfiguration.getFlags(reserveData.configuration);
 
         ( vars.principalReserveActive, , , , vars.principalReservePaused ) =
-            params.debtReserveCache.reserveConfiguration.getFlags();
+            ReserveConfiguration.getFlags(params.debtReserveCache.configuration);
 
         require(
             vars.collateralReserveActive && vars.principalReserveActive,
@@ -574,8 +597,8 @@ library ValidationLogic {
         );
 
         vars.isCollateralEnabled =
-            (reserveData.configuration.getLiquidationThreshold() != 0) &&
-            userConfig.isUsingAsCollateral(reserveData.id);
+            (ReserveConfiguration.getLiquidationThreshold(reserveData.configuration) != 0) &&
+            UserConfiguration.isUsingAsCollateral(userConfig, reserveData.id);
 
         // if collateral isn't enabled as collateral by user, it cannot be liquidated
         require(vars.isCollateralEnabled, Errors.COLLATERAL_CANNOT_BE_LIQUIDATED);
@@ -648,7 +671,7 @@ library ValidationLogic {
         address                                  oracle,
         uint8                                    userEModeCategory
     ) internal view {
-        ReserveData memory reservesData = reservesData[asset];
+        ReserveData memory reserveData = reservesData[asset];
 
         ( , bool hasZeroLtvCollateral ) =
             validateHealthFactor(
@@ -663,17 +686,17 @@ library ValidationLogic {
             );
 
         require(
-            !hasZeroLtvCollateral || (reservesData.configuration.getLtv() == 0),
+            !hasZeroLtvCollateral || (ReserveConfiguration.getLtv(reserveData.configuration) == 0),
             Errors.LTV_VALIDATION_FAILED
         );
     }
 
     /**
      * @notice Validates a transfer action.
-     * @param  reservesData The reserve object
+     * @param  reserveData The reserve object
      */
-    function validateTransfer(ReserveData storage reservesData) internal view {
-        require(!reservesData.configuration.getPaused(), Errors.RESERVE_PAUSED);
+    function validateTransfer(ReserveData storage reserveData) internal view {
+        require(!ReserveConfiguration.getPaused(reserveData.configuration), Errors.RESERVE_PAUSED);
     }
 
     /**
@@ -728,7 +751,7 @@ library ValidationLogic {
         );
 
         // eMode can always be enabled if the user hasn't supplied anything
-        if (userConfig.isEmpty()) return;
+        if (UserConfiguration.isEmpty(userConfig)) return;
 
         if (categoryId == 0) return;
 
@@ -736,10 +759,12 @@ library ValidationLogic {
         // not borrowing, or it's borrowing assets of categoryId
         unchecked {
             for (uint256 i = 0; i < reservesCount; i++) {
-                if (!userConfig.isBorrowing(i)) continue;
+                if (!UserConfiguration.isBorrowing(userConfig, i)) continue;
 
                 require(
-                    reservesData[reservesList[i]].configuration.getEModeCategory() == categoryId,
+                    ReserveConfiguration.getEModeCategory(
+                        reservesData[reservesList[i]].configuration
+                    ) == categoryId,
                     Errors.INCONSISTENT_EMODE_CATEGORY
                 );
             }
@@ -761,13 +786,13 @@ library ValidationLogic {
         UserConfigurationMap             storage userConfig,
         ReserveConfigurationMap          memory  reserveConfig
     ) internal view returns (bool) {
-        if (reserveConfig.getLtv() == 0)          return false;
-        if (!userConfig.isUsingAsCollateralAny()) return true;
+        if (ReserveConfiguration.getLtv(reserveConfig) == 0)       return false;
+        if (!UserConfiguration.isUsingAsCollateralAny(userConfig)) return true;
 
         ( bool isolationModeActive, , ) =
-            userConfig.getIsolationModeState(reservesData, reservesList);
+            UserConfiguration.getIsolationModeState(userConfig, reservesData, reservesList);
 
-        return !isolationModeActive && (reserveConfig.getDebtCeiling() == 0);
+        return !isolationModeActive && (ReserveConfiguration.getDebtCeiling(reserveConfig) == 0);
     }
 
     /**
@@ -791,7 +816,7 @@ library ValidationLogic {
         // if there is a debt ceiling, ensures only the ISOLATED_COLLATERAL_SUPPLIER_ROLE can enable
         // collateral as side-effect of an action
         if (
-            (reserveConfig.getDebtCeiling() != 0) &&
+            (ReserveConfiguration.getDebtCeiling(reserveConfig) != 0) &&
             !IAccessControl(
                 IPoolAddressesProvider(IPool(IncentivizedERC20(aToken).POOL()).ADDRESSES_PROVIDER())
                     .getACLManager()

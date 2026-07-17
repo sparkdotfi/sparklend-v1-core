@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.10;
 
-import { GPv2SafeERC20 }      from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
-import { IERC20 }             from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
+import { GPv2SafeERC20 } from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
+import { IERC20 }        from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
+
 import { IPriceOracleGetter } from '../../../interfaces/IPriceOracleGetter.sol';
-import { UserConfiguration }  from '../configuration/UserConfiguration.sol';
-import { Errors }             from '../helpers/Errors.sol';
-import { WadRayMath }         from '../math/WadRayMath.sol';
-import { PercentageMath }     from '../math/PercentageMath.sol';
+import { IPool }              from '../../../interfaces/IPool.sol';
+
+import { UserConfiguration } from '../configuration/UserConfiguration.sol';
+import { Errors }            from '../helpers/Errors.sol';
+import { WadRayMath }        from '../math/WadRayMath.sol';
+import { PercentageMath }    from '../math/PercentageMath.sol';
 
 import {
     EModeCategory,
@@ -27,15 +30,9 @@ import { ReserveLogic }    from './ReserveLogic.sol';
  */
 library EModeLogic {
 
-    using ReserveLogic for ReserveCache;
-    using ReserveLogic for ReserveData;
-    using GPv2SafeERC20 for IERC20;
-    using UserConfiguration for UserConfigurationMap;
-    using WadRayMath for uint256;
+    using GPv2SafeERC20  for IERC20;
+    using WadRayMath     for uint256;
     using PercentageMath for uint256;
-
-    // See `IPool` for descriptions
-    event UserEModeSet(address indexed user, uint8 categoryId);
 
     /**
      * @notice Updates the user efficiency mode category
@@ -85,7 +82,7 @@ library EModeLogic {
             );
         }
 
-        emit UserEModeSet(msg.sender, params.categoryId);
+        emit IPool.UserEModeSet(msg.sender, params.categoryId);
     }
 
     /**
@@ -104,6 +101,9 @@ library EModeLogic {
     ) internal view returns (uint256 ltv, uint256 liquidationThreshold, uint256 eModeAssetPrice) {
         address eModePriceSource = category.priceSource;
 
+        // Custom price source override: For correlated asset categories (like stablecoins or LSDs),
+        // we override individual asset prices with a common price source (e.g., pricing all USD stablecoins to USD price)
+        // to eliminate oracle price divergence liquidations.
         if (eModePriceSource != address(0)) {
             eModeAssetPrice = IPriceOracleGetter(oracle).getAssetPrice(eModePriceSource);
         }

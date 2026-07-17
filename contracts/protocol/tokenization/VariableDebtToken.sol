@@ -84,6 +84,8 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     function balanceOf(address user) public view virtual override returns (uint256) {
         uint256 scaledBalance = super.balanceOf(user);
 
+        // Convert the scaled debt balance to actual current debt balance by multiplying it
+        // by the reserve's normalized variable debt index (which compounds the variable borrow rate).
         return
             scaledBalance == 0
                 ? 0

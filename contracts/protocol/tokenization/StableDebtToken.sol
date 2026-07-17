@@ -104,6 +104,8 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
     function balanceOf(address account) public view virtual override returns (uint256) {
         uint256 balance = super.balanceOf(account);
 
+        // For stable debt, interest accumulates based on the user's individual fixed borrow rate
+        // compounded from their last update timestamp to the current block timestamp.
         return
             balance == 0
                 ? 0
@@ -138,6 +140,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
             _decreaseBorrowAllowance(onBehalfOf, user, amount);
         }
 
+        // Fetch user's accrued interest since their last action (to capitalize/compound it).
         ( , uint256 startingBalance, uint256 balanceIncrease ) =
             _calculateBalanceIncrease(onBehalfOf);
 
@@ -147,6 +150,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
         vars.amountInRay    = amount.wadToRay();
         vars.stableRate     = _userState[onBehalfOf].additionalData;
 
+        // Calculate the user's new weighted average stable borrow rate
         vars.nextStableRate =
             (
                 vars.stableRate.rayMul(startingBalance.wadToRay()) +
@@ -158,7 +162,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
         //solium-disable-next-line
         _totalSupplyTimestamp = _timestamps[onBehalfOf] = uint40(block.timestamp);
 
-        // Calculates the updated average stable rate
+        // Calculate the pool's new weighted average stable borrow rate
         vars.avgStableRate =
             _avgStableRate =
                 (
@@ -168,6 +172,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
                     ).rayDiv(vars.nextSupply.wadToRay())
                 ).toUint128();
 
+        // Capitalize/compound the user's accrued interest by minting the new borrow amount + the balance increase (accrued interest)
         uint256 amountToMint = amount + balanceIncrease;
 
         _mint(onBehalfOf, amountToMint, vars.previousSupply);
@@ -200,10 +205,9 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
         uint256 nextSupply        = 0;
         uint256 userStableRate    = _userState[from].additionalData;
 
-        // Since the total supply and each single user debt accrue separately, there might be
-        // accumulation errors so that the last borrower repaying might actually try to repay more
-        // than the available debt supply. In this case we simply set the total supply and the avg
-        // stable rate to 0
+        // Safely reduce the pool's average stable rate and total supply.
+        // Because user debt and total supply accumulate separately, minor rounding/imprecision errors can occur.
+        // If the repayment is the final portion of the supply, or exceeds previousSupply, zero out the rates to prevent underflow.
         if (previousSupply <= amount) {
             _avgStableRate = 0;
             _totalSupply   = 0;
@@ -213,9 +217,8 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
             uint256 firstTerm  = uint256(_avgStableRate).rayMul(previousSupply.wadToRay());
             uint256 secondTerm = userStableRate.rayMul(amount.wadToRay());
 
-            // For the same reason described above, when the last user is repaying it might happen
-            // that user rate * user balance > avg rate * total supply. In that case, we simply set
-            // the avg rate to 0
+            // Similarly, if user rate * amount exceeds the pool's average rate * total supply due to precision rounding,
+            // reset average stable rate to 0.
             if (secondTerm >= firstTerm) {
                 nextAvgStableRate = _totalSupply = _avgStableRate = 0;
             } else {

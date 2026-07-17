@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.10;
 
+import { IPool } from '../../../interfaces/IPool.sol';
+
 import {
     ReserveCache,
     ReserveConfigurationMap,
@@ -19,12 +21,7 @@ import { SafeCast }             from '../../../dependencies/openzeppelin/contrac
  */
 library IsolationModeLogic {
 
-    using ReserveConfiguration for ReserveConfigurationMap;
-    using UserConfiguration    for UserConfigurationMap;
-    using SafeCast             for uint256;
-
-    // See `IPool` for descriptions
-    event IsolationModeTotalDebtUpdated(address indexed asset, uint256 totalDebt);
+    using SafeCast for uint256;
 
     /**
      * @notice updated the isolated debt whenever a position collateralized by an isolated asset is
@@ -43,34 +40,37 @@ library IsolationModeLogic {
         uint256                                  repayAmount
     ) internal {
         ( bool isInIsolation, address collateralAsset, ) =
-            userConfig.getIsolationModeState(reservesData, reservesList);
+            UserConfiguration.getIsolationModeState(userConfig, reservesData, reservesList);
 
         if (!isInIsolation) return;
 
-        uint128 isolationModeTotalDebt = reservesData[collateralAsset].isolationModeTotalDebt;
+        uint256 isolationModeTotalDebt = reservesData[collateralAsset].isolationModeTotalDebt;
 
+        // Scale the repaid amount down from the asset's native decimals to the debt ceiling's decimals (DEBT_CEILING_DECIMALS = 2).
+        // For example, if borrowing a 18-decimal asset, it divides by 10^(18 - 2) = 10^16 to get the value in 2 decimals.
         uint128 isolatedDebtRepaid =
             (
                 repayAmount /
                 (
                     10 **
                     (
-                        reserveCache.reserveConfiguration.getDecimals() -
+                        ReserveConfiguration.getDecimals(reserveCache.configuration) -
                         ReserveConfiguration.DEBT_CEILING_DECIMALS
                     )
                 )
             ).toUint128();
 
-        // since the debt ceiling does not take into account the interest accrued, it might happen
-        // that amount repaid > debt in isolation mode
-        uint256 nextIsolationModeTotalDebt =
+        // The isolation total debt tracks principal exposure. Repayments include both principal and accrued interest,
+        // so the calculated isolatedDebtRepaid can occasionally exceed isolationModeTotalDebt.
+        // Cap the reduction to prevent integer underflow.
+        isolationModeTotalDebt =
             isolationModeTotalDebt <= isolatedDebtRepaid
                 ? 0
                 : isolationModeTotalDebt - isolatedDebtRepaid;
 
-        reservesData[collateralAsset].isolationModeTotalDebt = uint128(nextIsolationModeTotalDebt);
+        reservesData[collateralAsset].isolationModeTotalDebt = uint128(isolationModeTotalDebt);
 
-        emit IsolationModeTotalDebtUpdated(collateralAsset, nextIsolationModeTotalDebt);
+        emit IPool.IsolationModeTotalDebtUpdated(collateralAsset, isolationModeTotalDebt);
     }
 
 }

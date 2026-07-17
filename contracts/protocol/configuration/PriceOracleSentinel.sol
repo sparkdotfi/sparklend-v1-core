@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.10;
 
-import { Errors }                 from '../libraries/helpers/Errors.sol';
+import { Errors } from '../libraries/helpers/Errors.sol';
+
 import { IPoolAddressesProvider } from '../../interfaces/IPoolAddressesProvider.sol';
 import { IPriceOracleSentinel }   from '../../interfaces/IPriceOracleSentinel.sol';
 import { ISequencerOracle }       from '../../interfaces/ISequencerOracle.sol';
@@ -16,6 +17,12 @@ import { IACLManager }            from '../../interfaces/IACLManager.sol';
  *         and the grace period passed.
  */
 contract PriceOracleSentinel is IPriceOracleSentinel {
+
+    address public immutable override ADDRESSES_PROVIDER;
+
+    address internal _sequencerOracle;
+
+    uint256 internal _gracePeriod;
 
     /**
      * @dev Only pool admin can call functions marked by this modifier.
@@ -44,12 +51,6 @@ contract PriceOracleSentinel is IPriceOracleSentinel {
 
         _;
     }
-
-    address public immutable override ADDRESSES_PROVIDER;
-
-    address internal _sequencerOracle;
-
-    uint256 internal _gracePeriod;
 
     /**
      * @dev   Constructor

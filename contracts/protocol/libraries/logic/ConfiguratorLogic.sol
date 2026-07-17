@@ -2,6 +2,7 @@
 pragma solidity ^0.8.10;
 
 import { IPool }                   from '../../../interfaces/IPool.sol';
+import { IPoolConfigurator }       from '../../../interfaces/IPoolConfigurator.sol';
 import { IInitializableAToken }    from '../../../interfaces/IInitializableAToken.sol';
 import { IInitializableDebtToken } from '../../../interfaces/IInitializableDebtToken.sol';
 
@@ -25,35 +26,6 @@ import {
  */
 library ConfiguratorLogic {
 
-    using ReserveConfiguration for ReserveConfigurationMap;
-
-    // See `IPoolConfigurator` for descriptions
-    event ReserveInitialized(
-        address indexed asset,
-        address indexed aToken,
-        address         stableDebtToken,
-        address         variableDebtToken,
-        address         interestRateStrategy
-    );
-
-    event ATokenUpgraded(
-        address indexed asset,
-        address indexed proxy,
-        address indexed implementation
-    );
-
-    event StableDebtTokenUpgraded(
-        address indexed asset,
-        address indexed proxy,
-        address indexed implementation
-    );
-
-    event VariableDebtTokenUpgraded(
-        address indexed asset,
-        address indexed proxy,
-        address indexed implementation
-    );
-
     /**
      * @notice Initialize a reserve by creating and initializing aToken, stable debt token and
      *         variable deb
@@ -62,6 +34,8 @@ library ConfiguratorLogic {
      * @param  input The needed parameters for the initialization
      */
     function executeInitReserve(address pool, InitReserveInput calldata input) public {
+        // 1. Deploy and initialize the aToken proxy.
+        // It initializes the aToken with pointers to the pool, treasury, underlying asset, incentives, etc.
         address aTokenProxy = _initTokenWithProxy(
             input.aTokenImplementation,
             abi.encodeWithSelector(
@@ -77,6 +51,7 @@ library ConfiguratorLogic {
             )
         );
 
+        // 2. Deploy and initialize the stable debt token proxy.
         address stableDebtTokenProxy = _initTokenWithProxy(
             input.stableDebtTokenImplementation,
             abi.encodeWithSelector(
@@ -91,6 +66,7 @@ library ConfiguratorLogic {
             )
         );
 
+        // 3. Deploy and initialize the variable debt token proxy.
         address variableDebtTokenProxy = _initTokenWithProxy(
             input.variableDebtTokenImplementation,
             abi.encodeWithSelector(
@@ -105,6 +81,7 @@ library ConfiguratorLogic {
             )
         );
 
+        // 4. Register the newly created proxies in the Pool contract.
         IPool(pool).initReserve(
             input.underlyingAsset,
             aTokenProxy,
@@ -113,17 +90,17 @@ library ConfiguratorLogic {
             input.interestRateStrategy
         );
 
+        // 5. Initialize the reserve configuration bitmap with defaults: active, not frozen, not paused.
         ReserveConfigurationMap memory config = ReserveConfigurationMap(0);
 
-        config.setDecimals(input.underlyingAssetDecimals);
-
-        config.setActive(true);
-        config.setPaused(false);
-        config.setFrozen(false);
+        ReserveConfiguration.setDecimals(config, input.underlyingAssetDecimals);
+        ReserveConfiguration.setActive(config, true);
+        ReserveConfiguration.setPaused(config, false);
+        ReserveConfiguration.setFrozen(config, false);
 
         IPool(pool).setConfiguration(input.underlyingAsset, config);
 
-        emit ReserveInitialized(
+        emit IPoolConfigurator.ReserveInitialized(
             input.underlyingAsset,
             aTokenProxy,
             stableDebtTokenProxy,
@@ -141,7 +118,8 @@ library ConfiguratorLogic {
     function executeUpdateAToken(address pool, UpdateATokenInput calldata input) public {
         address aToken = IPool(pool).getReserveData(input.asset).aToken;
 
-        ( , , , uint256 decimals, , ) = IPool(pool).getConfiguration(input.asset).getParams();
+        ( , , , uint256 decimals, , ) =
+            ReserveConfiguration.getParams(IPool(pool).getConfiguration(input.asset));
 
         bytes memory encodedCall = abi.encodeWithSelector(
             IInitializableAToken.initialize.selector,
@@ -157,7 +135,7 @@ library ConfiguratorLogic {
 
         _upgradeTokenImplementation(aToken, input.implementation, encodedCall);
 
-        emit ATokenUpgraded(input.asset, aToken, input.implementation);
+        emit IPoolConfigurator.ATokenUpgraded(input.asset, aToken, input.implementation);
     }
 
     /**
@@ -172,7 +150,8 @@ library ConfiguratorLogic {
     ) public {
         address stableDebtToken = IPool(pool).getReserveData(input.asset).stableDebtToken;
 
-        ( , , , uint256 decimals, , ) = IPool(pool).getConfiguration(input.asset).getParams();
+        ( , , , uint256 decimals, , ) =
+            ReserveConfiguration.getParams(IPool(pool).getConfiguration(input.asset));
 
         bytes memory encodedCall = abi.encodeWithSelector(
             IInitializableDebtToken.initialize.selector,
@@ -187,7 +166,11 @@ library ConfiguratorLogic {
 
         _upgradeTokenImplementation(stableDebtToken, input.implementation, encodedCall);
 
-        emit StableDebtTokenUpgraded(input.asset, stableDebtToken, input.implementation);
+        emit IPoolConfigurator.StableDebtTokenUpgraded(
+            input.asset,
+            stableDebtToken,
+            input.implementation
+        );
     }
 
     /**
@@ -202,7 +185,8 @@ library ConfiguratorLogic {
     ) public {
         address variableDebtToken = IPool(pool).getReserveData(input.asset).variableDebtToken;
 
-        ( , , , uint256 decimals, , ) = IPool(pool).getConfiguration(input.asset).getParams();
+        ( , , , uint256 decimals, , ) =
+            ReserveConfiguration.getParams(IPool(pool).getConfiguration(input.asset));
 
         bytes memory encodedCall = abi.encodeWithSelector(
             IInitializableDebtToken.initialize.selector,
@@ -217,7 +201,11 @@ library ConfiguratorLogic {
 
         _upgradeTokenImplementation(variableDebtToken, input.implementation, encodedCall);
 
-        emit VariableDebtTokenUpgraded(input.asset, variableDebtToken, input.implementation);
+        emit IPoolConfigurator.VariableDebtTokenUpgraded(
+            input.asset,
+            variableDebtToken,
+            input.implementation
+        );
     }
 
     /**

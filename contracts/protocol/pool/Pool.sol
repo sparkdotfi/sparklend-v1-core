@@ -59,8 +59,6 @@ import { PoolStorage } from './PoolStorage.sol';
  */
 contract Pool is IPool, VersionedInitializable, PoolStorage {
 
-    using ReserveLogic for ReserveData;
-
     uint256 public constant POOL_REVISION = 0x1;
 
     address public immutable ADDRESSES_PROVIDER;
@@ -164,7 +162,7 @@ contract Pool is IPool, VersionedInitializable, PoolStorage {
     ) external virtual override onlyBridge returns (uint256) {
         return
             BridgeLogic.executeBackUnbacked({
-                reserve        : _reserves[asset],
+                reserveData    : _reserves[asset],
                 asset          : asset,
                 amount         : amount,
                 fee            : fee,
@@ -543,14 +541,14 @@ contract Pool is IPool, VersionedInitializable, PoolStorage {
     function getReserveNormalizedIncome(
         address asset
     ) external view virtual override returns (uint256) {
-        return _reserves[asset].getNormalizedIncome();
+        return ReserveLogic.getNormalizedIncome(_reserves[asset]);
     }
 
     /// @inheritdoc IPool
     function getReserveNormalizedVariableDebt(
         address asset
     ) external view virtual override returns (uint256) {
-        return _reserves[asset].getNormalizedDebt();
+        return ReserveLogic.getNormalizedDebt(_reserves[asset]);
     }
 
     /// @inheritdoc IPool
@@ -574,7 +572,9 @@ contract Pool is IPool, VersionedInitializable, PoolStorage {
             }
         }
 
-        // Reduces the length of the reserves array by `droppedReservesCount`
+        // Reduce the length of the reserves array in memory to omit dropped reserves.
+        // Overwriting the length of the `reservesList` array in-place using inline assembly
+        // avoids the gas and memory cost of allocating and copying items to a new array.
         assembly {
             mstore(reservesList, sub(reservesListCount, droppedReservesCount))
         }
@@ -624,6 +624,7 @@ contract Pool is IPool, VersionedInitializable, PoolStorage {
         uint256 balanceFromBefore,
         uint256 balanceToBefore
     ) external virtual override {
+        // Enforce that only the specific aToken contract representing the asset can trigger this finalization callback.
         require(msg.sender == _reserves[asset].aToken, Errors.CALLER_NOT_ATOKEN);
 
         SupplyLogic.executeFinalizeTransfer(

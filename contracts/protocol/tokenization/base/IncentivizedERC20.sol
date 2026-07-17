@@ -206,10 +206,12 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
 
         uint256 totalSupply = _totalSupply;
 
+        // Notify incentives controller for the sender's updated balance state.
         controller.handleAction(sender, totalSupply, oldSenderBalance);
 
         if (sender == recipient) return;
 
+        // Notify incentives controller for the recipient's updated balance state.
         controller.handleAction(recipient, totalSupply, oldRecipientBalance);
     }
 

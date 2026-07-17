@@ -1,22 +1,26 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.10;
 
-import { GPv2SafeERC20 }          from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
-import { SafeCast }               from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
-import { IERC20 }                 from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
+import { GPv2SafeERC20 } from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
+import { SafeCast }      from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
+import { IERC20 }        from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
+
 import { IAToken }                from '../../../interfaces/IAToken.sol';
 import { IPool }                  from '../../../interfaces/IPool.sol';
-import { IFlashLoanReceiver }     from '../../../flashloan/interfaces/IFlashLoanReceiver.sol';
 import { IPoolAddressesProvider } from '../../../interfaces/IPoolAddressesProvider.sol';
-import { UserConfiguration }      from '../configuration/UserConfiguration.sol';
-import { ReserveConfiguration }   from '../configuration/ReserveConfiguration.sol';
-import { Errors }                 from '../helpers/Errors.sol';
-import { WadRayMath }             from '../math/WadRayMath.sol';
-import { PercentageMath }         from '../math/PercentageMath.sol';
+
+import { IFlashLoanReceiver }     from '../../../flashloan/interfaces/IFlashLoanReceiver.sol';
 
 import {
     IFlashLoanSimpleReceiver
 } from '../../../flashloan/interfaces/IFlashLoanSimpleReceiver.sol';
+
+import { UserConfiguration }    from '../configuration/UserConfiguration.sol';
+import { ReserveConfiguration } from '../configuration/ReserveConfiguration.sol';
+import { Errors }               from '../helpers/Errors.sol';
+import { WadRayMath }           from '../math/WadRayMath.sol';
+import { PercentageMath }       from '../math/PercentageMath.sol';
+
 
 import {
     EModeCategory,
@@ -41,24 +45,10 @@ import { ReserveLogic }    from './ReserveLogic.sol';
  */
 library FlashLoanLogic {
 
-    using ReserveLogic         for ReserveCache;
-    using ReserveLogic         for ReserveData;
-    using GPv2SafeERC20        for IERC20;
-    using ReserveConfiguration for ReserveConfigurationMap;
-    using WadRayMath           for uint256;
-    using PercentageMath       for uint256;
-    using SafeCast             for uint256;
-
-    // See `IPool` for descriptions
-    event FlashLoan(
-        address          indexed target,
-        address                  initiator,
-        address          indexed asset,
-        uint256                  amount,
-        InterestRateMode         interestRateMode,
-        uint256                  premium,
-        uint16           indexed referralCode
-    );
+    using GPv2SafeERC20  for IERC20;
+    using WadRayMath     for uint256;
+    using PercentageMath for uint256;
+    using SafeCast       for uint256;
 
     // Helper struct for internal variables used in the `executeFlashLoan` function
     struct FlashLoanLocalVars {
@@ -98,6 +88,11 @@ library FlashLoanLogic {
         // (validation -> user payload -> cache -> updateState -> changeState -> updateRates)
         // to protect against reentrance and rate manipulation within the user specified payload.
 
+        // Flash loan execution order is modified to prevent reentrancy and rate manipulation attacks.
+        // By calling the user's payload (`executeOperation()`) BEFORE updating interest rates and caching states,
+        // any actions inside the user payload (e.g., borrowing or depositing) will execute against accurate state representation,
+        // and cannot exploit the transient/intermediate state of the flash loan itself.
+
         ValidationLogic.validateFlashloan(reservesData, params.assets, params.amounts);
 
         FlashLoanLocalVars memory vars;
@@ -111,6 +106,7 @@ library FlashLoanLogic {
                 ? ( 0, 0 )
                 : ( params.premiumTotal, params.premiumToProtocol );
 
+        // Transfer the underlying assets to the recipient contract before invoking the user payload.
         for (vars.i = 0; vars.i < params.assets.length; vars.i++) {
             vars.amount = params.amounts[vars.i];
 
@@ -123,6 +119,7 @@ library FlashLoanLogic {
                 .transferUnderlyingTo(params.recipient, vars.amount);
         }
 
+        // Execute the user's custom payload logic.
         require(
             vars.receiver.executeOperation(
                 params.assets,
@@ -134,6 +131,7 @@ library FlashLoanLogic {
             Errors.INVALID_FLASHLOAN_EXECUTOR_RETURN
         );
 
+        // Verify and process repayments for all borrowed assets.
         for (vars.i = 0; vars.i < params.assets.length; vars.i++) {
             vars.asset  = params.assets[vars.i];
             vars.amount = params.amounts[vars.i];
@@ -218,26 +216,37 @@ library FlashLoanLogic {
         ReserveData              storage reserveData,
         FlashLoanRepaymentParams memory  params
     ) internal {
+        // Split the total premium: protocol fee is stored in accruedToTreasury, LP fee is compounded directly.
         uint256 premiumToProtocol = params.totalPremium.percentMul(params.premiumToProtocol);
         uint256 premiumToLP       = params.totalPremium - premiumToProtocol;
         uint256 amountPlusPremium = params.amount + params.totalPremium;
 
-        ReserveCache memory reserveCache = reserveData.cache();
+        ReserveCache memory reserveCache = ReserveLogic.cache(reserveData);
 
-        reserveData.updateState(reserveCache);
+        ReserveLogic.updateState(reserveData, reserveCache);
 
-        reserveCache.nextLiquidityIndex =
-            reserveData.cumulateToLiquidityIndex(
+        // Cumulate LP share of the premium directly into the liquidity index (compounding supplier rates).
+        reserveCache.liquidityIndex =
+            ReserveLogic.cumulateToLiquidityIndex(
+                reserveData,
                 IERC20(reserveCache.aToken).totalSupply() +
-                uint256(reserveData.accruedToTreasury).rayMul(reserveCache.nextLiquidityIndex),
+                uint256(reserveData.accruedToTreasury).rayMul(reserveCache.liquidityIndex),
                 premiumToLP
             );
 
+        // Protocol share is scaled down and registered under accruedToTreasury.
         reserveData.accruedToTreasury +=
-            premiumToProtocol.rayDiv(reserveCache.nextLiquidityIndex).toUint128();
+            premiumToProtocol.rayDiv(reserveCache.liquidityIndex).toUint128();
 
-        reserveData.updateInterestRates(reserveCache, params.asset, amountPlusPremium, 0);
+        ReserveLogic.updateInterestRates(
+            reserveData,
+            reserveCache,
+            params.asset,
+            amountPlusPremium,
+            0
+        );
 
+        // Pull the underlying principal + total fee from the recipient contract.
         IERC20(params.asset).safeTransferFrom(
             params.recipient,
             reserveCache.aToken,
@@ -250,7 +259,7 @@ library FlashLoanLogic {
             amountPlusPremium
         );
 
-        emit FlashLoan(
+        emit IPool.FlashLoan(
             params.recipient,
             msg.sender,
             params.asset,

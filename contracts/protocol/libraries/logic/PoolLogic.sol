@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.10;
 
-import { GPv2SafeERC20 }        from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
-import { Address }              from '../../../dependencies/openzeppelin/contracts/Address.sol';
-import { IERC20 }               from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
-import { IAToken }              from '../../../interfaces/IAToken.sol';
+import { GPv2SafeERC20 } from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
+import { Address }       from '../../../dependencies/openzeppelin/contracts/Address.sol';
+import { IERC20 }        from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
+
+import { IAToken } from '../../../interfaces/IAToken.sol';
+import { IPool }   from '../../../interfaces/IPool.sol';
+
 import { ReserveConfiguration } from '../configuration/ReserveConfiguration.sol';
 import { Errors }               from '../helpers/Errors.sol';
 import { WadRayMath }           from '../math/WadRayMath.sol';
@@ -28,15 +31,8 @@ import { GenericLogic }    from './GenericLogic.sol';
  */
 library PoolLogic {
 
-    using GPv2SafeERC20        for IERC20;
-    using WadRayMath           for uint256;
-    using ReserveLogic         for ReserveData;
-    using ReserveConfiguration for ReserveConfigurationMap;
-
-    // See `IPool` for descriptions
-    event MintedToTreasury(address indexed reserve, uint256 amountMinted);
-
-    event IsolationModeTotalDebtUpdated(address indexed asset, uint256 totalDebt);
+    using GPv2SafeERC20 for IERC20;
+    using WadRayMath    for uint256;
 
     /**
      * @notice Initialize an asset reserve and add the reserve to the list of reserves
@@ -52,7 +48,8 @@ library PoolLogic {
     ) external returns (bool) {
         require(Address.isContract(params.asset), Errors.NOT_CONTRACT);
 
-        reservesData[params.asset].init(
+        ReserveLogic.init(
+            reservesData[params.asset],
             params.aToken,
             params.stableDebt,
             params.variableDebt,
@@ -64,21 +61,24 @@ library PoolLogic {
 
         require(!reserveAlreadyAdded, Errors.RESERVE_ALREADY_ADDED);
 
+        // Search the existing reservesList for any empty/deleted slot (represented by address(0))
+        // to re-use the index and keep the active list contiguous/compact, avoiding index expansion.
         for (uint16 i = 0; i < params.reservesCount; i++) {
             if (reservesList[i] != address(0)) continue;
 
             reservesData[params.asset].id = i;
             reservesList[i]               = params.asset;
 
-            return false;
+            return false; // Returns false since it did not expand the reservesCount list size
         }
 
         require(params.reservesCount < params.maxNumberReserves, Errors.NO_MORE_RESERVES_ALLOWED);
 
+        // If no empty slot was found, append the reserve to the end of the list.
         reservesData[params.asset].id      = params.reservesCount;
         reservesList[params.reservesCount] = params.asset;
 
-        return true;
+        return true; // Returns true since it expanded the reservesCount list size
     }
 
     /**
@@ -106,22 +106,23 @@ library PoolLogic {
 
             ReserveData storage reserveData = reservesData[asset];
 
-            // this cover both inactive reserves and invalid reserves since the flag will be 0 for
-            // both
-            if (!reserveData.configuration.getActive()) continue;
+            // Only mint fees for active reserves.
+            if (!ReserveConfiguration.getActive(reserveData.configuration)) continue;
 
             uint256 accruedToTreasury = reserveData.accruedToTreasury;
 
             if (accruedToTreasury == 0) continue;
 
+            // Reset the storage value to 0 before executing external mint call (CEI pattern to prevent reentrancy issues).
             reserveData.accruedToTreasury = 0;
 
-            uint256 normalizedIncome = reserveData.getNormalizedIncome();
+            // Convert the scaled accrued debt fee to unscaled token amount by multiplying by the current liquidity index (normalized income)
+            uint256 normalizedIncome = ReserveLogic.getNormalizedIncome(reserveData);
             uint256 amountToMint     = accruedToTreasury.rayMul(normalizedIncome);
 
             IAToken(reserveData.aToken).mintToTreasury(amountToMint, normalizedIncome);
 
-            emit MintedToTreasury(asset, amountToMint);
+            emit IPool.MintedToTreasury(asset, amountToMint);
         }
     }
 
@@ -136,13 +137,13 @@ library PoolLogic {
         address                                  asset
     ) external {
         require(
-            reservesData[asset].configuration.getDebtCeiling() == 0,
+            ReserveConfiguration.getDebtCeiling(reservesData[asset].configuration) == 0,
             Errors.DEBT_CEILING_NOT_ZERO
         );
 
         reservesData[asset].isolationModeTotalDebt = 0;
 
-        emit IsolationModeTotalDebtUpdated(asset, 0);
+        emit IPool.IsolationModeTotalDebtUpdated(asset, 0);
     }
 
     /**

@@ -17,12 +17,11 @@ import {
  * @author Aave
  * @notice Contract used as storage of the Pool contract.
  * @dev    It defines the storage layout of the Pool contract.
+ * @dev    WARNING: Storage layout must remain strictly linear and append-only. Rearranging,
+ *         modifying type sizing, or deleting variables will break storage alignment and cause
+ *         storage corruption upon proxy upgrades.
  */
 contract PoolStorage {
-
-    using ReserveLogic for ReserveData;
-    using ReserveConfiguration for ReserveConfigurationMap;
-    using UserConfiguration for UserConfigurationMap;
 
     // Map of reserves and their data (underlyingAssetOfReserve => reserveData)
     mapping(address => ReserveData) internal _reserves;

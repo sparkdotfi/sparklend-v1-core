@@ -12,11 +12,15 @@ import { ReserveConfiguration }                                       from './Re
  */
 library UserConfiguration {
 
-    using ReserveConfiguration for ReserveConfigurationMap;
+    // The user configuration is packed into a uint256 bitmap where each reserve index uses 2 bits:
+    // - Bit 2*i: Borrowing flag (1 if user has active borrowing of reserve i, else 0)
+    // - Bit 2*i + 1: Collateral flag (1 if user is using reserve i as collateral, else 0)
 
+    // BORROWING_MASK: 0x5555... (binary 01010101...) selects only the even bits (borrowing flags)
     uint256 internal constant BORROWING_MASK =
         0x5555555555555555555555555555555555555555555555555555555555555555;
 
+    // COLLATERAL_MASK: 0xAAAA... (binary 10101010...) selects only the odd bits (collateral flags)
     uint256 internal constant COLLATERAL_MASK =
         0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
 
@@ -145,6 +149,8 @@ library UserConfiguration {
     ) internal pure returns (bool) {
         uint256 collateralData = self.data & COLLATERAL_MASK;
 
+        // Bitwise trick: A number is a power of 2 (only one bit set) if (n & (n - 1)) == 0.
+        // Since COLLATERAL_MASK contains only odd bits, if only one collateral bit is set, the mask result has exactly one bit set.
         return collateralData != 0 && (collateralData & (collateralData - 1) == 0);
     }
 
@@ -206,7 +212,8 @@ library UserConfiguration {
         if (isUsingAsCollateralOne(self)) {
             address assetAddress = reservesList[_getFirstAssetIdByMask(self, COLLATERAL_MASK)];
 
-            uint256 ceiling = reservesData[assetAddress].configuration.getDebtCeiling();
+            uint256 ceiling =
+                ReserveConfiguration.getDebtCeiling(reservesData[assetAddress].configuration);
 
             if (ceiling != 0) return (true, assetAddress, ceiling);
         }
@@ -230,7 +237,11 @@ library UserConfiguration {
         if (isBorrowingOne(self)) {
             address assetAddress = reservesList[_getFirstAssetIdByMask(self, BORROWING_MASK)];
 
-            if (reservesData[assetAddress].configuration.getSiloedBorrowing()) return (true, assetAddress);
+            if (
+                ReserveConfiguration.getSiloedBorrowing(reservesData[assetAddress].configuration)
+            ) {
+                return (true, assetAddress);
+            }
         }
 
         return (false, address(0));
@@ -247,8 +258,13 @@ library UserConfiguration {
     ) internal pure returns (uint256 id) {
         unchecked {
             uint256 bitmapData         = self.data & mask;
+            // Bitwise trick: isolates the lowest set bit. For example, if bitmapData is 00101000,
+            // then (bitmapData - 1) is 00100111, and ~(bitmapData - 1) is 11011000.
+            // bitmapData & ~(bitmapData - 1) yields 00001000 (the lowest set bit).
             uint256 firstAssetPosition = bitmapData & ~(bitmapData - 1);
 
+            // Shift the isolated bit to the right by 2 bits at a time (since each asset has 2 bits).
+            // The number of shifts needed to make it 0 is the index (id) of the reserve asset.
             while ((firstAssetPosition >>= 2) != 0) {
                 id += 1;
             }

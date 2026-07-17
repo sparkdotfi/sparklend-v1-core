@@ -135,7 +135,7 @@ interface IPoolDataProvider {
      * @return liquidityRate           The liquidity rate of the reserve
      * @return variableBorrowRate      The variable borrow rate of the reserve
      * @return stableBorrowRate        The stable borrow rate of the reserve
-     * @return averageStableBorrowRate The average stable borrow rate of the reserve
+     * @return avgStableBorrowRate     The average stable borrow rate of the reserve
      * @return liquidityIndex          The liquidity index of the reserve
      * @return variableBorrowIndex     The variable borrow index of the reserve
      * @return lastUpdateTimestamp     The timestamp of the last update of the reserve
@@ -154,7 +154,7 @@ interface IPoolDataProvider {
             uint256 liquidityRate,
             uint256 variableBorrowRate,
             uint256 stableBorrowRate,
-            uint256 averageStableBorrowRate,
+            uint256 avgStableBorrowRate,
             uint256 liquidityIndex,
             uint256 variableBorrowIndex,
             uint40  lastUpdateTimestamp

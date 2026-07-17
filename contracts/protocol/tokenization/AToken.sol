@@ -134,6 +134,8 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     function balanceOf(
         address user
     ) public view virtual override(IncentivizedERC20, IERC20) returns (uint256) {
+        // Multiply the user's scaled balance (stored in contract) by the reserve's normalized income (liquidity index)
+        // to dynamically incorporate accrued interest and calculate the user's actual current balance.
         return
             super.balanceOf(user).rayMul(IPool(POOL).getReserveNormalizedIncome(_underlyingAsset));
     }
@@ -148,6 +150,7 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     {
         uint256 supplyScaled = super.totalSupply();
 
+        // Similarly, scale the total supply by the normalized income to get the actual total supply.
         return
             supplyScaled == 0
                 ? 0
@@ -227,12 +230,16 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     function _transfer(address from, address to, uint256 amount, bool validate) internal virtual {
         address underlyingAsset = _underlyingAsset;
 
+        // Calculate the user's actual unscaled balance before the transfer is completed.
         uint256 index             = IPool(POOL).getReserveNormalizedIncome(underlyingAsset);
         uint256 fromBalanceBefore = super.balanceOf(from).rayMul(index);
         uint256 toBalanceBefore   = super.balanceOf(to).rayMul(index);
 
+        // Perform the standard scaled token transfer.
         super._transfer(from, to, amount, index);
 
+        // If validation is requested, call finalizeTransfer in the Pool contract to verify
+        // that the sender's health factor remains >= 1 after losing collateral.
         if (validate) {
             IPool(POOL).finalizeTransfer(
                 underlyingAsset,
@@ -280,6 +287,7 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
 
     /// @inheritdoc IAToken
     function rescueTokens(address token, address to, uint256 amount) external override onlyPoolAdmin {
+        // Prevent rescuing the underlying asset to ensure that supplied collateral is never drained by admin functions.
         require(token != _underlyingAsset, Errors.UNDERLYING_CANNOT_BE_RESCUED);
 
         IERC20(token).safeTransfer(to, amount);

@@ -24,8 +24,11 @@ library CalldataLogic {
     uint16 referralCode;
 
     assembly {
+      // Extract the first 16 bits (bits 0-15) for the assetId (represented by a uint16)
       assetId := and(args, 0xFFFF)
+      // Shift right by 16 bits and extract 128 bits (bits 16-143) for the amount (represented by a uint128)
       amount := and(shr(16, args), 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+      // Shift right by 144 bits and extract 16 bits (bits 144-159) for the referralCode (represented by a uint16)
       referralCode := and(shr(144, args), 0xFFFF)
     }
     return (reservesList[assetId], amount, referralCode);
@@ -252,14 +255,22 @@ library CalldataLogic {
     bool receiveAToken;
 
     assembly {
+      // args1 Layout:
+      // - Bits 0-15: collateralAssetId (16 bits)
+      // - Bits 16-31: debtAssetId (16 bits)
+      // - Bits 32-191: user address (160 bits)
       collateralAssetId := and(args1, 0xFFFF)
       debtAssetId := and(shr(16, args1), 0xFFFF)
       user := and(shr(32, args1), 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
 
+      // args2 Layout:
+      // - Bits 0-127: debtToCover amount (128 bits)
+      // - Bits 128-135: receiveAToken boolean flag (8 bits)
       debtToCover := and(args2, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
       receiveAToken := and(shr(128, args2), 0x1)
     }
 
+    // Convert maximum uint128 value to max uint256 to support 'liquidate all' shorthand
     if (debtToCover == type(uint128).max) {
       debtToCover = type(uint256).max;
     }

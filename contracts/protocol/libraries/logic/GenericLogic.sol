@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.10;
 
-import { IERC20 }               from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
-import { IScaledBalanceToken }  from '../../../interfaces/IScaledBalanceToken.sol';
-import { IPriceOracleGetter }   from '../../../interfaces/IPriceOracleGetter.sol';
+import { IERC20 } from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
+
+import { IScaledBalanceToken } from '../../../interfaces/IScaledBalanceToken.sol';
+import { IPriceOracleGetter }  from '../../../interfaces/IPriceOracleGetter.sol';
+
 import { ReserveConfiguration } from '../configuration/ReserveConfiguration.sol';
 import { UserConfiguration }    from '../configuration/UserConfiguration.sol';
 import { PercentageMath }       from '../math/PercentageMath.sol';
@@ -27,11 +29,8 @@ import { EModeLogic }  from './EModeLogic.sol';
  */
 library GenericLogic {
 
-    using ReserveLogic         for ReserveData;
-    using WadRayMath           for uint256;
-    using PercentageMath       for uint256;
-    using ReserveConfiguration for ReserveConfigurationMap;
-    using UserConfiguration    for UserConfigurationMap;
+    using WadRayMath     for uint256;
+    using PercentageMath for uint256;
 
     struct CalculateUserAccountDataVars {
         uint256 assetPrice;
@@ -76,7 +75,9 @@ library GenericLogic {
         mapping (uint8 => EModeCategory) storage eModeCategories,
         CalculateUserAccountDataParams   memory  params
     ) internal view returns (uint256, uint256, uint256, uint256, uint256, bool) {
-        if (params.userConfig.isEmpty()) return ( 0, 0, 0, 0, type(uint256).max, false );
+        if (UserConfiguration.isEmpty(params.userConfig)) {
+            return ( 0, 0, 0, 0, type(uint256).max, false );
+        }
 
         CalculateUserAccountDataVars memory vars;
 
@@ -89,7 +90,7 @@ library GenericLogic {
         }
 
         while (vars.i < params.reservesCount) {
-            if (!params.userConfig.isUsingAsCollateralOrBorrowing(vars.i)) {
+            if (!UserConfiguration.isUsingAsCollateralOrBorrowing(params.userConfig, vars.i)) {
                 unchecked {
                     ++vars.i;
                 }
@@ -116,18 +117,23 @@ library GenericLogic {
                 vars.decimals,
                 ,
                 vars.eModeAssetCategory
-            ) = reserveData.configuration.getParams();
+            ) = ReserveConfiguration.getParams(reserveData.configuration);
 
             unchecked {
                 vars.assetUnit = 10 ** vars.decimals;
             }
 
+            // If user has set an EMode category and the asset is part of that category,
+            // use the custom category price (which is usually a pegged/correlated price), otherwise query the oracle.
             vars.assetPrice =
                 (vars.eModeAssetPrice != 0) && (params.userEModeCategory == vars.eModeAssetCategory)
                     ? vars.eModeAssetPrice
                     : IPriceOracleGetter(params.oracle).getAssetPrice(vars.reserve);
 
-            if ((vars.liquidationThreshold != 0) && params.userConfig.isUsingAsCollateral(vars.i)) {
+            if (
+                (vars.liquidationThreshold != 0) &&
+                UserConfiguration.isUsingAsCollateral(params.userConfig, vars.i)
+            ) {
                 vars.balance = _getUserBalanceInBaseCurrency(
                     params.user,
                     reserveData,
@@ -140,6 +146,8 @@ library GenericLogic {
                 vars.isInEModeCategory =
                     EModeLogic.isInEModeCategory(params.userEModeCategory, vars.eModeAssetCategory);
 
+                // Accumulate weighted LTV and Liquidation Threshold.
+                // If user is in the asset's EMode category, use the optimized EMode LTV/Threshold.
                 if (vars.ltv != 0) {
                     vars.avgLtv +=
                         vars.balance * (vars.isInEModeCategory ? vars.eModeLtv : vars.ltv);
@@ -152,7 +160,7 @@ library GenericLogic {
                     (vars.isInEModeCategory ? vars.eModeLiqThreshold : vars.liquidationThreshold);
             }
 
-            if (params.userConfig.isBorrowing(vars.i)) {
+            if (UserConfiguration.isBorrowing(params.userConfig, vars.i)) {
                 vars.debt +=
                     _getUserDebtInBaseCurrency(
                         params.user,
@@ -229,16 +237,20 @@ library GenericLogic {
         uint256             assetUnit
     ) private view returns (uint256 debt) {
         // fetching variable debt
+        // Query the scaled balance (principal only) instead of balanceOf to save gas,
+        // then multiply by the normalized variable debt index to get the actual current variable debt (principal + interest).
         debt = IScaledBalanceToken(reserveData.variableDebtToken).scaledBalanceOf(user);
 
         if (debt != 0) {
-            debt = debt.rayMul(reserveData.getNormalizedDebt());
+            debt = debt.rayMul(ReserveLogic.getNormalizedDebt(reserveData));
         }
 
+        // Add stable debt (queried using balanceOf since stable debt accumulates differently)
         debt += IERC20(reserveData.stableDebtToken).balanceOf(user);
         debt *= assetPrice;
 
         unchecked {
+            // Normalize the debt value in base currency using the asset unit (10^decimals)
             return debt / assetUnit;
         }
     }
@@ -263,13 +275,16 @@ library GenericLogic {
         uint256             assetPrice,
         uint256             assetUnit
     ) private view returns (uint256 balance) {
-        uint256 normalizedIncome = reserveData.getNormalizedIncome();
+        uint256 normalizedIncome = ReserveLogic.getNormalizedIncome(reserveData);
 
+        // Retrieve user's scaled balance and multiply by the normalized income (liquidity index)
+        // to dynamically incorporate accrued supply interest without executing a full ERC20 external balanceOf call.
         balance =
             IScaledBalanceToken(reserveData.aToken).scaledBalanceOf(user).rayMul(normalizedIncome) *
             assetPrice;
 
         unchecked {
+            // Normalize collateral value to base currency using the asset unit (10^decimals)
             return balance / assetUnit;
         }
     }

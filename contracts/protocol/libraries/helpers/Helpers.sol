@@ -21,6 +21,7 @@ library Helpers {
         address             user,
         ReserveCache memory reserveCache
     ) internal view returns (uint256, uint256) {
+        // Query the balance directly from the stable and variable debt ERC20 token implementations for this reserve.
         return (
             IERC20(reserveCache.stableDebtToken).balanceOf(user),
             IERC20(reserveCache.variableDebtToken).balanceOf(user)

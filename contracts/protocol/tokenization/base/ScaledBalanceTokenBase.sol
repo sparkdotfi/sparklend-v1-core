@@ -70,20 +70,25 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
         uint256 amount,
         uint256 index
     ) internal returns (bool) {
+        // Scale the principal amount down by the current liquidity index (amount / index)
         uint256 amountScaled = amount.rayDiv(index);
 
         require(amountScaled != 0, Errors.INVALID_MINT_AMOUNT);
 
         uint256 scaledBalance = super.balanceOf(onBehalfOf);
 
+        // Calculate the user's accrued interest since their last token interaction
         uint256 balanceIncrease =
             scaledBalance.rayMul(index) -
             scaledBalance.rayMul(_userState[onBehalfOf].additionalData);
 
+        // Update the user's stored index to the current index
         _userState[onBehalfOf].additionalData = index.toUint128();
 
+        // Mint the scaled principal to the user's balance
         _mint(onBehalfOf, amountScaled.toUint128());
 
+        // Emit Transfer/Mint events reflecting both the new principal and the newly capitalized interest
         uint256 amountToMint = amount + balanceIncrease;
 
         emit Transfer(address(0), onBehalfOf, amountToMint);
@@ -102,19 +107,25 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
      * @param  index  The variable debt index of the reserve
      */
     function _burnScaled(address user, address target, uint256 amount, uint256 index) internal {
+        // Scale the burn amount down by the current index
         uint256 amountScaled = amount.rayDiv(index);
 
         require(amountScaled != 0, Errors.INVALID_BURN_AMOUNT);
 
         uint256 scaledBalance = super.balanceOf(user);
 
+        // Calculate the user's accrued interest since their last interaction
         uint256 balanceIncrease =
             scaledBalance.rayMul(index) - scaledBalance.rayMul(_userState[user].additionalData);
 
+        // Update the user's stored index to the current index
         _userState[user].additionalData = index.toUint128();
 
         _burn(user, amountScaled.toUint128());
 
+        // If the user's accrued interest is greater than the burn amount, the user's balance
+        // net-increases. In this case, we emit a Transfer/Mint for the surplus interest.
+        // Otherwise, emit a Transfer/Burn for the net reduction.
         if (balanceIncrease > amount) {
             uint256 amountToMint = balanceIncrease - amount;
 
@@ -139,20 +150,24 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     function _transfer(address sender, address recipient, uint256 amount, uint256 index) internal {
         uint256 senderScaledBalance = super.balanceOf(sender);
 
+        // Accrue and realize interest for the sender up to the current block
         uint256 senderBalanceIncrease =
             senderScaledBalance.rayMul(index) -
             senderScaledBalance.rayMul(_userState[sender].additionalData);
 
         uint256 recipientScaledBalance = super.balanceOf(recipient);
 
+        // Accrue and realize interest for the recipient up to the current block
         uint256 recipientBalanceIncrease =
             recipientScaledBalance.rayMul(index) - recipientScaledBalance.rayMul(_userState[recipient].additionalData);
 
         _userState[sender].additionalData    = index.toUint128();
         _userState[recipient].additionalData = index.toUint128();
 
+        // Perform the transfer of scaled tokens (amount / index)
         super._transfer(sender, recipient, amount.rayDiv(index).toUint128());
 
+        // Emit Transfer/Mint events to materialize the interest accrued by both parties
         if (senderBalanceIncrease > 0) {
             emit Transfer(address(0), sender, senderBalanceIncrease);
             emit Mint(_msgSender(), sender, senderBalanceIncrease, senderBalanceIncrease, index);

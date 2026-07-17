@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.10;
 
-import { GPv2SafeERC20 }        from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
-import { SafeCast }             from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
-import { IERC20 }               from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
-import { IStableDebtToken }     from '../../../interfaces/IStableDebtToken.sol';
-import { IVariableDebtToken }   from '../../../interfaces/IVariableDebtToken.sol';
-import { IAToken }              from '../../../interfaces/IAToken.sol';
+import { GPv2SafeERC20 } from '../../../dependencies/gnosis/contracts/GPv2SafeERC20.sol';
+import { SafeCast }      from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
+import { IERC20 }        from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
+
+import { IStableDebtToken }   from '../../../interfaces/IStableDebtToken.sol';
+import { IVariableDebtToken } from '../../../interfaces/IVariableDebtToken.sol';
+import { IAToken }            from '../../../interfaces/IAToken.sol';
+import { IPool }              from '../../../interfaces/IPool.sol';
+
 import { UserConfiguration }    from '../configuration/UserConfiguration.sol';
 import { ReserveConfiguration } from '../configuration/ReserveConfiguration.sol';
 import { Helpers }              from '../helpers/Helpers.sol';
@@ -28,47 +31,14 @@ import { ReserveLogic }       from './ReserveLogic.sol';
 import { IsolationModeLogic } from './IsolationModeLogic.sol';
 
 /**
- * @title BorrowLogic library
+ * @title  BorrowLogic library
  * @author Aave
  * @notice Implements the base logic for all the actions related to borrowing
  */
 library BorrowLogic {
 
-    using ReserveLogic         for ReserveCache;
-    using ReserveLogic         for ReserveData;
-    using GPv2SafeERC20        for IERC20;
-    using UserConfiguration    for UserConfigurationMap;
-    using ReserveConfiguration for ReserveConfigurationMap;
-    using SafeCast             for uint256;
-
-    // See `IPool` for descriptions
-    event Borrow(
-        address          indexed reserve,
-        address                  user,
-        address          indexed onBehalfOf,
-        uint256                  amount,
-        InterestRateMode         interestRateMode,
-        uint256                  borrowRate,
-        uint16           indexed referralCode
-    );
-
-    event Repay(
-        address indexed reserve,
-        address indexed user,
-        address indexed repayer,
-        uint256         amount,
-        bool            useATokens
-    );
-
-    event RebalanceStableBorrowRate(address indexed reserve, address indexed user);
-
-    event SwapBorrowRateMode(
-        address          indexed reserve,
-        address          indexed user,
-        InterestRateMode         interestRateMode
-    );
-
-    event IsolationModeTotalDebtUpdated(address indexed asset, uint256 totalDebt);
+    using GPv2SafeERC20 for IERC20;
+    using SafeCast      for uint256;
 
     /**
      * @notice Implements the borrow feature. Borrowing allows users that provided collateral to
@@ -87,19 +57,19 @@ library BorrowLogic {
         mapping (uint256 => address)     storage reservesList,
         mapping (uint8 => EModeCategory) storage eModeCategories,
         UserConfigurationMap             storage userConfig,
-        ExecuteBorrowParams              memory params
+        ExecuteBorrowParams              memory  params
     ) public {
         ReserveData storage reserveData = reservesData[params.asset];
 
-        ReserveCache memory reserveCache = reserveData.cache();
+        ReserveCache memory reserveCache = ReserveLogic.cache(reserveData);
 
-        reserveData.updateState(reserveCache);
+        ReserveLogic.updateState(reserveData, reserveCache);
 
         (
             bool    isolationModeActive,
             address isolationModeCollateralAsset,
             uint256 isolationModeDebtCeiling
-        ) = userConfig.getIsolationModeState(reservesData, reservesList);
+        ) = UserConfiguration.getIsolationModeState(userConfig, reservesData, reservesList);
 
         ValidationLogic.validateBorrow(
             reservesData,
@@ -126,13 +96,14 @@ library BorrowLogic {
         uint256 stableRate        = 0;
         bool    isFirstBorrowing  = false;
 
+        // Mint corresponding debt tokens based on interest rate mode selection
         if (params.interestRateMode == InterestRateMode.STABLE) {
             stableRate = reserveData.stableBorrowRate;
 
             (
                 isFirstBorrowing,
-                reserveCache.nextTotalStableDebt,
-                reserveCache.nextAvgStableBorrowRate
+                reserveCache.totalStableDebt,
+                reserveCache.avgStableBorrowRate
             ) =
                 IStableDebtToken(reserveCache.stableDebtToken)
                     .mint(
@@ -142,53 +113,58 @@ library BorrowLogic {
                         stableRate
                     );
         } else {
-            ( isFirstBorrowing, reserveCache.nextScaledVariableDebt ) =
+            ( isFirstBorrowing, reserveCache.scaledVariableDebt ) =
                 IVariableDebtToken(reserveCache.variableDebtToken)
                     .mint(
                         params.user,
                         params.onBehalfOf,
                         params.amount,
-                        reserveCache.nextVariableBorrowIndex
+                        reserveCache.variableBorrowIndex
                     );
         }
 
+        // If this is the user's first active borrow of this asset, set the borrowing flag in their config bitmap.
         if (isFirstBorrowing) {
-            userConfig.setBorrowing(reserveData.id, true);
+            UserConfiguration.setBorrowing(userConfig, reserveData.id, true);
         }
 
         if (isolationModeActive) {
-            uint256 nextIsolationModeTotalDebt = (
+            // Under isolation mode, increase the collateral asset's total isolation debt exposure.
+            // Normalize the decimals from the borrowed asset's decimals down to debt ceiling decimals (2).
+            uint256 isolationModeTotalDebt = (
                 reservesData[isolationModeCollateralAsset].isolationModeTotalDebt +=
                     (
                         params.amount /
                         (
                             10 **
                             (
-                                reserveCache.reserveConfiguration.getDecimals() -
+                                ReserveConfiguration.getDecimals(reserveCache.configuration) -
                                 ReserveConfiguration.DEBT_CEILING_DECIMALS
                             )
                         )
                     ).toUint128()
             );
 
-            emit IsolationModeTotalDebtUpdated(
+            emit IPool.IsolationModeTotalDebtUpdated(
                 isolationModeCollateralAsset,
-                nextIsolationModeTotalDebt
+                isolationModeTotalDebt
             );
         }
 
-        reserveData.updateInterestRates(
+        ReserveLogic.updateInterestRates(
+            reserveData,
             reserveCache,
             params.asset,
             0,
             params.releaseUnderlying ? params.amount : 0
         );
 
+        // If requested, release the underlying tokens by transferring them directly from aToken holdings to the user.
         if (params.releaseUnderlying) {
             IAToken(reserveCache.aToken).transferUnderlyingTo(params.user, params.amount);
         }
 
-        emit Borrow(
+        emit IPool.Borrow(
             params.asset,
             params.user,
             params.onBehalfOf,
@@ -220,9 +196,9 @@ library BorrowLogic {
     ) external returns (uint256) {
         ReserveData storage reserveData = reservesData[params.asset];
 
-        ReserveCache memory reserveCache = reserveData.cache();
+        ReserveCache memory reserveCache = ReserveLogic.cache(reserveData);
 
-        reserveData.updateState(reserveCache);
+        ReserveLogic.updateState(reserveData, reserveCache);
 
         ( uint256 stableDebt, uint256 variableDebt ) =
             Helpers.getUserCurrentDebt(params.onBehalfOf, reserveCache);
@@ -239,7 +215,7 @@ library BorrowLogic {
         uint256 repaid =
             params.interestRateMode == InterestRateMode.STABLE ? stableDebt : variableDebt;
 
-        // Allows a user to repay with aTokens without leaving dust from interest.
+        // Allow the user to repay using aTokens directly. If repay amount is max, use their entire aToken balance.
         if (params.useATokens && params.amount == type(uint256).max) {
             params.amount = IAToken(reserveCache.aToken).balanceOf(msg.sender);
         }
@@ -248,25 +224,28 @@ library BorrowLogic {
             repaid = params.amount;
         }
 
+        // Burn the user's debt tokens
         if (params.interestRateMode == InterestRateMode.STABLE) {
-            ( reserveCache.nextTotalStableDebt, reserveCache.nextAvgStableBorrowRate ) =
+            ( reserveCache.totalStableDebt, reserveCache.avgStableBorrowRate ) =
                 IStableDebtToken(reserveCache.stableDebtToken)
                     .burn(params.onBehalfOf, repaid);
         } else {
-            reserveCache.nextScaledVariableDebt =
+            reserveCache.scaledVariableDebt =
                 IVariableDebtToken(reserveCache.variableDebtToken)
-                    .burn(params.onBehalfOf, repaid, reserveCache.nextVariableBorrowIndex);
+                    .burn(params.onBehalfOf, repaid, reserveCache.variableBorrowIndex);
         }
 
-        reserveData.updateInterestRates(
+        ReserveLogic.updateInterestRates(
+            reserveData,
             reserveCache,
             params.asset,
             params.useATokens ? 0 : repaid,
             0
         );
 
+        // If the user's entire stable + variable debt is fully cleared, disable the borrowing flag in user Config
         if (stableDebt + variableDebt - repaid == 0) {
-            userConfig.setBorrowing(reserveData.id, false);
+            UserConfiguration.setBorrowing(userConfig, reserveData.id, false);
         }
 
         IsolationModeLogic.updateIsolatedDebtIfIsolated(
@@ -278,13 +257,15 @@ library BorrowLogic {
         );
 
         if (params.useATokens) {
+            // Repaying with aTokens: burn the user's supplied aTokens directly.
             IAToken(reserveCache.aToken).burn(
                 msg.sender,
                 reserveCache.aToken,
                 repaid,
-                reserveCache.nextLiquidityIndex
+                reserveCache.liquidityIndex
             );
         } else {
+            // Repaying with cash/underlying: pull underlying from the repayer and register aToken deposit.
             IERC20(params.asset).safeTransferFrom(msg.sender, reserveCache.aToken, repaid);
 
             IAToken(reserveCache.aToken).handleRepayment(
@@ -294,7 +275,7 @@ library BorrowLogic {
             );
         }
 
-        emit Repay(params.asset, params.onBehalfOf, msg.sender, repaid, params.useATokens);
+        emit IPool.Repay(params.asset, params.onBehalfOf, msg.sender, repaid, params.useATokens);
     }
 
     /**
@@ -313,22 +294,22 @@ library BorrowLogic {
         address             asset,
         address             user
     ) external {
-        ReserveCache memory reserveCache = reserveData.cache();
+        ReserveCache memory reserveCache = ReserveLogic.cache(reserveData);
 
-        reserveData.updateState(reserveCache);
+        ReserveLogic.updateState(reserveData, reserveCache);
         ValidationLogic.validateRebalanceStableBorrowRate(reserveData, reserveCache, asset);
 
         uint256 stableDebt = IERC20(reserveCache.stableDebtToken).balanceOf(user);
 
         IStableDebtToken(reserveCache.stableDebtToken).burn(user, stableDebt);
 
-        ( , reserveCache.nextTotalStableDebt, reserveCache.nextAvgStableBorrowRate ) =
+        ( , reserveCache.totalStableDebt, reserveCache.avgStableBorrowRate ) =
             IStableDebtToken(reserveCache.stableDebtToken)
                 .mint(user, user, stableDebt, reserveData.stableBorrowRate);
 
-        reserveData.updateInterestRates(reserveCache, asset, 0, 0);
+        ReserveLogic.updateInterestRates(reserveData, reserveCache, asset, 0, 0);
 
-        emit RebalanceStableBorrowRate(asset, user);
+        emit IPool.RebalanceStableBorrowRate(asset, user);
     }
 
     /**
@@ -346,9 +327,9 @@ library BorrowLogic {
         address                      asset,
         InterestRateMode             interestRateMode
     ) external {
-        ReserveCache memory reserveCache = reserveData.cache();
+        ReserveCache memory reserveCache = ReserveLogic.cache(reserveData);
 
-        reserveData.updateState(reserveCache);
+        ReserveLogic.updateState(reserveData, reserveCache);
 
         ( uint256 stableDebt, uint256 variableDebt ) =
             Helpers.getUserCurrentDebt(msg.sender, reserveCache);
@@ -363,18 +344,18 @@ library BorrowLogic {
         );
 
         if (interestRateMode == InterestRateMode.STABLE) {
-            ( reserveCache.nextTotalStableDebt, reserveCache.nextAvgStableBorrowRate ) =
+            ( reserveCache.totalStableDebt, reserveCache.avgStableBorrowRate ) =
                 IStableDebtToken(reserveCache.stableDebtToken).burn(msg.sender, stableDebt);
 
-            ( , reserveCache.nextScaledVariableDebt ) =
+            ( , reserveCache.scaledVariableDebt ) =
                 IVariableDebtToken(reserveCache.variableDebtToken)
-                    .mint(msg.sender, msg.sender, stableDebt, reserveCache.nextVariableBorrowIndex);
+                    .mint(msg.sender, msg.sender, stableDebt, reserveCache.variableBorrowIndex);
         } else {
-            reserveCache.nextScaledVariableDebt =
+            reserveCache.scaledVariableDebt =
                 IVariableDebtToken(reserveCache.variableDebtToken)
-                    .burn(msg.sender, variableDebt, reserveCache.nextVariableBorrowIndex);
+                    .burn(msg.sender, variableDebt, reserveCache.variableBorrowIndex);
 
-            ( , reserveCache.nextTotalStableDebt, reserveCache.nextAvgStableBorrowRate ) =
+            ( , reserveCache.totalStableDebt, reserveCache.avgStableBorrowRate ) =
                 IStableDebtToken(reserveCache.stableDebtToken)
                     .mint(
                         msg.sender,
@@ -384,9 +365,9 @@ library BorrowLogic {
                     );
         }
 
-        reserveData.updateInterestRates(reserveCache, asset, 0, 0);
+        ReserveLogic.updateInterestRates(reserveData, reserveCache, asset, 0, 0);
 
-        emit SwapBorrowRateMode(asset, msg.sender, interestRateMode);
+        emit IPool.SwapBorrowRateMode(asset, msg.sender, interestRateMode);
     }
 
 }

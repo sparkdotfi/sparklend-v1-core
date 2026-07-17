@@ -42,6 +42,8 @@ abstract contract MintableIncentivizedERC20 is IncentivizedERC20 {
 
         _userState[account].balance = oldAccountBalance + amount;
 
+        // Notify the incentives controller about the balance update so it can calculate/accrue reward distributions
+        // based on the user's share of the total supply prior to this action.
         if (_incentivesController == address(0)) return;
 
         IAaveIncentivesController(_incentivesController)
@@ -62,6 +64,8 @@ abstract contract MintableIncentivizedERC20 is IncentivizedERC20 {
 
         _userState[account].balance = oldAccountBalance - amount;
 
+        // Notify the incentives controller about the balance update so it can calculate/accrue reward distributions
+        // based on the user's share of the total supply prior to this action.
         if (_incentivesController == address(0)) return;
 
         IAaveIncentivesController(_incentivesController)

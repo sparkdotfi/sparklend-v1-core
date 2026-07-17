@@ -32,8 +32,7 @@ import { IPoolDataProvider } from '../../interfaces/IPoolDataProvider.sol';
  */
 contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
 
-    using PercentageMath       for uint256;
-    using ReserveConfiguration for ReserveConfigurationMap;
+    using PercentageMath for uint256;
 
     address internal _addressesProvider;
     address internal _pool;
@@ -134,11 +133,11 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
         require(
-            enabled || !config.getStableRateBorrowingEnabled(),
+            enabled || !ReserveConfiguration.getStableRateBorrowingEnabled(config),
             Errors.STABLE_BORROWING_ENABLED
         );
 
-        config.setBorrowingEnabled(enabled);
+        ReserveConfiguration.setBorrowingEnabled(config, enabled);
         IPool(_pool).setConfiguration(asset, config);
 
         emit ReserveBorrowing(asset, enabled);
@@ -151,23 +150,20 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
         uint256 liquidationThreshold,
         uint256 liquidationBonus
     ) external override onlyRiskOrPoolAdmins {
-        // validation of the parameters: the LTV can only be lower or equal than the liquidation
-        // threshold (otherwise a loan against the asset would cause instantaneous liquidation)
+        // Enforce that LTV <= liquidationThreshold. If LTV was greater, any borrow would be immediately liquidatable.
         require(ltv <= liquidationThreshold, Errors.INVALID_RESERVE_PARAMS);
 
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
         if (liquidationThreshold != 0) {
-            // liquidation bonus must be bigger than 100.00%, otherwise the liquidator would receive
-            // less collateral than needed to cover the debt
+            // Liquidation bonus must be > 100% (10000 bps) to incentivize liquidators to participate.
             require(
                 liquidationBonus > PercentageMath.PERCENTAGE_FACTOR,
                 Errors.INVALID_RESERVE_PARAMS
             );
 
-            // if threshold * bonus is less than PERCENTAGE_FACTOR, it's guaranteed that at the
-            // moment a loan is taken there is enough collateral available to cover the liquidation
-            // bonus
+            // Enforce (liquidationThreshold * liquidationBonus) <= 100%. This guarantees that when a position
+            // crosses the liquidation threshold, the user still has enough collateral to cover the full liquidation bonus.
             require(
                 liquidationThreshold.percentMul(liquidationBonus) <=
                 PercentageMath.PERCENTAGE_FACTOR,
@@ -176,14 +172,14 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
         } else {
             require(liquidationBonus == 0, Errors.INVALID_RESERVE_PARAMS);
 
-            // if the liquidation threshold is being set to 0, the reserve is being disabled as
-            // collateral. To do so, we need to ensure no liquidity is supplied
+            // If the liquidation threshold is being set to 0, the reserve is being disabled as collateral.
+            // Enforce that no users have existing deposits of this asset before disabling it.
             _checkNoSuppliers(asset);
         }
 
-        config.setLtv(ltv);
-        config.setLiquidationThreshold(liquidationThreshold);
-        config.setLiquidationBonus(liquidationBonus);
+        ReserveConfiguration.setLtv(config, ltv);
+        ReserveConfiguration.setLiquidationThreshold(config, liquidationThreshold);
+        ReserveConfiguration.setLiquidationBonus(config, liquidationBonus);
 
         IPool(_pool).setConfiguration(asset, config);
 
@@ -197,9 +193,12 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
     ) external override onlyRiskOrPoolAdmins {
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        require(!enabled || config.getBorrowingEnabled(), Errors.BORROWING_NOT_ENABLED);
+        require(
+            !enabled || ReserveConfiguration.getBorrowingEnabled(config),
+            Errors.BORROWING_NOT_ENABLED
+        );
 
-        config.setStableRateBorrowingEnabled(enabled);
+        ReserveConfiguration.setStableRateBorrowingEnabled(config, enabled);
         IPool(_pool).setConfiguration(asset, config);
 
         emit ReserveStableRateBorrowing(asset, enabled);
@@ -212,7 +211,7 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
     ) external override onlyRiskOrPoolAdmins {
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        config.setFlashLoanEnabled(enabled);
+        ReserveConfiguration.setFlashLoanEnabled(config, enabled);
         IPool(_pool).setConfiguration(asset, config);
 
         emit ReserveFlashLoaning(asset, enabled);
@@ -226,7 +225,7 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
 
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        config.setActive(active);
+        ReserveConfiguration.setActive(config, active);
         IPool(_pool).setConfiguration(asset, config);
 
         emit ReserveActive(asset, active);
@@ -236,7 +235,7 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
     function setReserveFreeze(address asset, bool freeze) external override onlyRiskOrPoolAdmins {
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        config.setFrozen(freeze);
+        ReserveConfiguration.setFrozen(config, freeze);
         IPool(_pool).setConfiguration(asset, config);
 
         emit ReserveFrozen(asset, freeze);
@@ -249,7 +248,7 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
     ) external override onlyRiskOrPoolAdmins {
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        config.setBorrowableInIsolation(borrowable);
+        ReserveConfiguration.setBorrowableInIsolation(config, borrowable);
         IPool(_pool).setConfiguration(asset, config);
 
         emit BorrowableInIsolationChanged(asset, borrowable);
@@ -259,7 +258,7 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
     function setReservePause(address asset, bool paused) public override onlyEmergencyOrPoolAdmin {
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        config.setPaused(paused);
+        ReserveConfiguration.setPaused(config, paused);
         IPool(_pool).setConfiguration(asset, config);
 
         emit ReservePaused(asset, paused);
@@ -277,9 +276,9 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
 
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        uint256 oldReserveFactor = config.getReserveFactor();
+        uint256 oldReserveFactor = ReserveConfiguration.getReserveFactor(config);
 
-        config.setReserveFactor(newReserveFactor);
+        ReserveConfiguration.setReserveFactor(config, newReserveFactor);
         IPool(_pool).setConfiguration(asset, config);
 
         emit ReserveFactorChanged(asset, oldReserveFactor, newReserveFactor);
@@ -292,15 +291,18 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
     ) external override onlyRiskOrPoolAdmins {
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        uint256 oldDebtCeiling = config.getDebtCeiling();
+        uint256 oldDebtCeiling = ReserveConfiguration.getDebtCeiling(config);
 
+        // If configuring a debt ceiling for the first time, ensure there are no existing suppliers
+        // of this asset to avoid retroactively isolating pre-existing collateral positions.
         if (oldDebtCeiling == 0) {
             _checkNoSuppliers(asset);
         }
 
-        config.setDebtCeiling(newDebtCeiling);
+        ReserveConfiguration.setDebtCeiling(config, newDebtCeiling);
         IPool(_pool).setConfiguration(asset, config);
 
+        // If the debt ceiling is set to 0, isolation mode is disabled. Reset the isolated total debt tracking.
         if (newDebtCeiling == 0) {
             IPool(_pool).resetIsolationModeTotalDebt(asset);
         }
@@ -319,9 +321,9 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
 
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        bool oldSiloed = config.getSiloedBorrowing();
+        bool oldSiloed = ReserveConfiguration.getSiloedBorrowing(config);
 
-        config.setSiloedBorrowing(newSiloed);
+        ReserveConfiguration.setSiloedBorrowing(config, newSiloed);
         IPool(_pool).setConfiguration(asset, config);
 
         emit SiloedBorrowingChanged(asset, oldSiloed, newSiloed);
@@ -334,9 +336,9 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
     ) external override onlyRiskOrPoolAdmins {
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        uint256 oldBorrowCap = config.getBorrowCap();
+        uint256 oldBorrowCap = ReserveConfiguration.getBorrowCap(config);
 
-        config.setBorrowCap(newBorrowCap);
+        ReserveConfiguration.setBorrowCap(config, newBorrowCap);
         IPool(_pool).setConfiguration(asset, config);
 
         emit BorrowCapChanged(asset, oldBorrowCap, newBorrowCap);
@@ -349,9 +351,9 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
     ) external override onlyRiskOrPoolAdmins {
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        uint256 oldSupplyCap = config.getSupplyCap();
+        uint256 oldSupplyCap = ReserveConfiguration.getSupplyCap(config);
 
-        config.setSupplyCap(newSupplyCap);
+        ReserveConfiguration.setSupplyCap(config, newSupplyCap);
         IPool(_pool).setConfiguration(asset, config);
 
         emit SupplyCapChanged(asset, oldSupplyCap, newSupplyCap);
@@ -369,9 +371,9 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
 
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        uint256 oldFee = config.getLiquidationProtocolFee();
+        uint256 oldFee = ReserveConfiguration.getLiquidationProtocolFee(config);
 
-        config.setLiquidationProtocolFee(newFee);
+        ReserveConfiguration.setLiquidationProtocolFee(config, newFee);
         IPool(_pool).setConfiguration(asset, config);
 
         emit LiquidationProtocolFeeChanged(asset, oldFee, newFee);
@@ -411,12 +413,15 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
         for (uint256 i = 0; i < reserves.length; i++) {
             ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(reserves[i]);
 
-            if (categoryId != config.getEModeCategory()) continue;
-
-            require(ltv > config.getLtv(), Errors.INVALID_EMODE_CATEGORY_PARAMS);
+            if (categoryId != ReserveConfiguration.getEModeCategory(config)) continue;
 
             require(
-                liquidationThreshold > config.getLiquidationThreshold(),
+                ltv > ReserveConfiguration.getLtv(config),
+                Errors.INVALID_EMODE_CATEGORY_PARAMS
+            );
+
+            require(
+                liquidationThreshold > ReserveConfiguration.getLiquidationThreshold(config),
                 Errors.INVALID_EMODE_CATEGORY_PARAMS
             );
         }
@@ -453,14 +458,14 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
             (newCategoryId == 0) ||
             (
                 IPool(_pool).getEModeCategoryData(newCategoryId).liquidationThreshold >
-                config.getLiquidationThreshold()
+                ReserveConfiguration.getLiquidationThreshold(config)
             ),
             Errors.INVALID_EMODE_CATEGORY_ASSIGNMENT
         );
 
-        uint256 oldCategoryId = config.getEModeCategory();
+        uint256 oldCategoryId = ReserveConfiguration.getEModeCategory(config);
 
-        config.setEModeCategory(newCategoryId);
+        ReserveConfiguration.setEModeCategory(config, newCategoryId);
         IPool(_pool).setConfiguration(asset, config);
 
         emit EModeAssetCategoryChanged(asset, uint8(oldCategoryId), newCategoryId);
@@ -473,9 +478,9 @@ contract PoolConfigurator is VersionedInitializable, IPoolConfigurator {
     ) external override onlyRiskOrPoolAdmins {
         ReserveConfigurationMap memory config = IPool(_pool).getConfiguration(asset);
 
-        uint256 oldUnbackedMintCap = config.getUnbackedMintCap();
+        uint256 oldUnbackedMintCap = ReserveConfiguration.getUnbackedMintCap(config);
 
-        config.setUnbackedMintCap(newUnbackedMintCap);
+        ReserveConfiguration.setUnbackedMintCap(config, newUnbackedMintCap);
         IPool(_pool).setConfiguration(asset, config);
 
         emit UnbackedMintCapChanged(asset, oldUnbackedMintCap, newUnbackedMintCap);
