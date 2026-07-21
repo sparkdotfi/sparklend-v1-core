@@ -110,7 +110,7 @@ abstract contract DebtTokenBase is
     uint256 correctedAmount
   ) internal {
     uint256 oldBorrowAllowance = _borrowAllowances[delegator][delegatee];
-    require(oldBorrowAllowance >= amount);
+    require(oldBorrowAllowance >= amount, 'Insufficient allowance');
 
     uint256 consumption = oldBorrowAllowance >= correctedAmount
       ? correctedAmount

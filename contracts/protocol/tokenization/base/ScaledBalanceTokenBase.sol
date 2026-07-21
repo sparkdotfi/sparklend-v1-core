@@ -179,6 +179,6 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     if (roundingMode == RoundingMode.ROUND_UP) {
       return amount.rayDivCeil(index);
     }
-    revert(Errors.INVALID_AMOUNT);
+    revert('Invalid Rounding Mode');
   }
 }
