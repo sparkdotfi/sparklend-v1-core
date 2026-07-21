@@ -10,7 +10,7 @@ contract MockATokenRepayment is AToken {
   constructor(IPool pool) AToken(pool) {}
 
   function getRevision() internal pure override returns (uint256) {
-    return 0x2;
+    return 0x3;
   }
 
   function handleRepayment(
