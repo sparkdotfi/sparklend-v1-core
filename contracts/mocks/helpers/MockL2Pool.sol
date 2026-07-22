@@ -6,7 +6,7 @@ import {L2Pool} from '../../protocol/pool/L2Pool.sol';
 
 contract MockL2Pool is L2Pool {
   function getRevision() internal pure override returns (uint256) {
-    return 0x3;
+    return 0x5;
   }
 
   constructor(IPoolAddressesProvider provider) L2Pool(provider) {}
