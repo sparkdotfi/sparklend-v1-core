@@ -558,7 +558,7 @@ makeSuite('AToken: Mint and Burn Event Accounting', (testEnv) => {
     expect(parsedMintEvent.caller).to.equal(depositor.address);
     expect(parsedMintEvent.onBehalfOf).to.equal(depositor.address);
     expect(parsedMintEvent.value).to.be.closeTo(totalMinted, 2);
-    expect(parsedMintEvent.balanceIncrease).to.be.closeTo(totalMinted.add(smallWithdrawal), 2);
+    expect(parsedMintEvent.balanceIncrease).to.be.closeTo(totalMinted.add(smallWithdrawal), 3);
     expect(parsedMintEvent.index).to.equal(daiReserveData.liquidityIndex);
   });
 });

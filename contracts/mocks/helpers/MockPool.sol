@@ -33,7 +33,7 @@ contract MockPoolInherited is Pool {
   uint16 internal _maxNumberOfReserves = 128;
 
   function getRevision() internal pure override returns (uint256) {
-    return 0x5;
+    return 0x6;
   }
 
   constructor(IPoolAddressesProvider provider) Pool(provider) {}
