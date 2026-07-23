@@ -144,19 +144,17 @@ makeSuite('Pool: FlashLoan', (testEnv: TestEnv) => {
 
     expect(wethTotalLiquidityBefore.add(wethTotalFees)).to.be.closeTo(wethTotalLiquidityAfter, 2);
     expect(wethCurrentLiquidityRate).to.be.equal(0);
-    expect(wethCurrentLiquidityIndex).to.be.closeTo(
-      wethLiquidityIndexBefore.add(wethLiquidityIndexAdded),
-      1
+    expect(wethCurrentLiquidityIndex).to.be.equal(
+      wethLiquidityIndexBefore.add(wethLiquidityIndexAdded)
     );
-    expect(wethReservesAfter).to.be.closeTo(wethReservesBefore.add(wethFeesToProtocol), 1);
+    expect(wethReservesAfter.add(1)).to.be.equal(wethReservesBefore.add(wethFeesToProtocol));
 
     expect(daiTotalLiquidityBefore.add(daiTotalFees)).to.be.closeTo(daiTotalLiquidityAfter, 2);
     expect(daiCurrentLiquidityRate).to.be.equal(0);
-    expect(daiCurrentLiquidityIndex).to.be.closeTo(
-      daiLiquidityIndexBefore.add(daiLiquidityIndexAdded),
-      1
+    expect(daiCurrentLiquidityIndex).to.be.equal(
+      daiLiquidityIndexBefore.add(daiLiquidityIndexAdded)
     );
-    expect(daiReservesAfter).to.be.closeTo(daiReservesBefore.add(daiFeesToProtocol), 1);
+    expect(daiReservesAfter.add(1)).to.be.equal(daiReservesBefore.add(daiFeesToProtocol));
 
     // Check event values for `ReserveDataUpdated`
     const reserveDataUpdatedEvents = tx.events?.filter(
@@ -275,7 +273,7 @@ makeSuite('Pool: FlashLoan', (testEnv: TestEnv) => {
     const reservesAfter = await aWETH.balanceOf(await aWETH.RESERVE_TREASURY_ADDRESS());
     expect(totalLiquidityBefore.add(totalFees)).to.be.closeTo(totalLiquidityAfter, 2);
     expect(currentLiquidityRate).to.be.equal(0);
-    expect(currentLiquidityIndex).to.be.closeTo(liquidityIndexBefore.add(liquidityIndexAdded), 1);
+    expect(currentLiquidityIndex).to.be.equal(liquidityIndexBefore.add(liquidityIndexAdded).add(1));
     expect(
       reservesAfter.sub(feesToProtocol).mul(liquidityIndexBefore).div(currentLiquidityIndex)
     ).to.be.closeTo(reservesBefore, 2);
@@ -503,8 +501,8 @@ makeSuite('Pool: FlashLoan', (testEnv: TestEnv) => {
 
     expect(totalLiquidityBefore.add(totalFees)).to.be.closeTo(totalLiquidityAfter, 2);
     expect(currentLiquidityRate).to.be.equal(0);
-    expect(currentLiquidityIndex).to.be.closeTo(liquidityIndexBefore.add(liquidityIndexAdded), 1);
-    expect(reservesAfter).to.be.closeTo(reservesBefore.add(feesToProtocol), 1);
+    expect(currentLiquidityIndex).to.be.equal(liquidityIndexBefore.add(liquidityIndexAdded));
+    expect(reservesAfter.add(1)).to.be.equal(reservesBefore.add(feesToProtocol));
 
     // Check handleRepayment is correctly called at flash loans
     await expect(tx)
