@@ -12,7 +12,7 @@ import {IInitializableDebtToken} from '../../interfaces/IInitializableDebtToken.
 import {IVariableDebtToken} from '../../interfaces/IVariableDebtToken.sol';
 import {EIP712Base} from './base/EIP712Base.sol';
 import {DebtTokenBase} from './base/DebtTokenBase.sol';
-import {ScaledBalanceTokenBase} from './base/ScaledBalanceTokenBase.sol';
+import {ScaledIncentivizedERC20} from './base/IncentivizedERC20.sol';
 
 /**
  * @title VariableDebtToken
@@ -21,7 +21,7 @@ import {ScaledBalanceTokenBase} from './base/ScaledBalanceTokenBase.sol';
  * at variable rate mode
  * @dev Transfer and approve functionalities are disabled since its a non-transferable token
  */
-contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDebtToken {
+contract VariableDebtToken is DebtTokenBase, ScaledIncentivizedERC20, IVariableDebtToken {
   using WadRayMath for uint256;
   using SafeCast for uint256;
 
@@ -35,7 +35,7 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     IPool pool
   )
     DebtTokenBase()
-    ScaledBalanceTokenBase(pool, 'VARIABLE_DEBT_TOKEN_IMPL', 'VARIABLE_DEBT_TOKEN_IMPL', 0)
+    ScaledIncentivizedERC20(pool, 'VARIABLE_DEBT_TOKEN_IMPL', 'VARIABLE_DEBT_TOKEN_IMPL', 0)
   {
     // Intentionally left blank
   }

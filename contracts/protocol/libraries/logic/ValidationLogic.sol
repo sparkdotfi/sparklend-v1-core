@@ -21,7 +21,7 @@ import {DataTypes} from '../types/DataTypes.sol';
 import {ReserveLogic} from './ReserveLogic.sol';
 import {GenericLogic} from './GenericLogic.sol';
 import {SafeCast} from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
-import {IncentivizedERC20} from '../../tokenization/base/IncentivizedERC20.sol';
+import {ScaledIncentivizedERC20} from '../../tokenization/base/IncentivizedERC20.sol';
 
 /**
  * @title ReserveLogic library
@@ -741,7 +741,7 @@ library ValidationLogic {
   ) internal view returns (bool) {
     if (reserveConfig.getDebtCeiling() != 0) {
       // ensures only the ISOLATED_COLLATERAL_SUPPLIER_ROLE can enable collateral as side-effect of an action
-      IPoolAddressesProvider addressesProvider = IncentivizedERC20(aTokenAddress)
+      IPoolAddressesProvider addressesProvider = ScaledIncentivizedERC20(aTokenAddress)
         .POOL()
         .ADDRESSES_PROVIDER();
       if (
