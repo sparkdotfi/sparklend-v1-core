@@ -125,21 +125,21 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
   }
 
   /// @inheritdoc IERC20
-  function balanceOf(
-    address user
-  ) public view virtual override(IncentivizedERC20, IERC20) returns (uint256) {
-    return super.balanceOf(user).rayMulFloor(POOL.getReserveNormalizedIncome(_underlyingAsset));
+  function balanceOf(address user) public view returns (uint256) {
+    return
+      _getRebasedAmount(_scaledBalanceOf(user), POOL.getReserveNormalizedIncome(_underlyingAsset));
   }
 
   /// @inheritdoc IERC20
-  function totalSupply() public view virtual override(IncentivizedERC20, IERC20) returns (uint256) {
-    uint256 currentSupplyScaled = super.totalSupply();
+  function totalSupply() public view returns (uint256) {
+    uint256 currentSupplyScaled = _scaledTotalSupply();
 
     if (currentSupplyScaled == 0) {
       return 0;
     }
 
-    return currentSupplyScaled.rayMulFloor(POOL.getReserveNormalizedIncome(_underlyingAsset));
+    return
+      _getRebasedAmount(currentSupplyScaled, POOL.getReserveNormalizedIncome(_underlyingAsset));
   }
 
   /// @inheritdoc IAToken
@@ -193,26 +193,53 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
   }
 
   /// @inheritdoc IERC20
+  function transfer(address recipient, uint256 amount) external virtual override returns (bool) {
+    _transfer(_msgSender(), recipient, amount.toUint128(), true);
+    return true;
+  }
+
+  /// @inheritdoc IERC20
   function transferFrom(
     address sender,
     address recipient,
     uint256 amount
-  ) external virtual override(IERC20, IncentivizedERC20) returns (bool) {
-    uint128 castAmount = amount.toUint128();
-    uint256 index = POOL.getReserveNormalizedIncome(_underlyingAsset);
-    uint256 scaledBalanceOfSender = super.balanceOf(sender);
-    uint256 scaledAmount = uint256(castAmount).rayDivCeil(index);
+  ) external virtual returns (bool) {
+    _spendAllowance(sender, _msgSender(), amount);
 
-    // Inspired by Aave v3.5: consume allowance based on the sender's actual indexed
-    // balance decrease while preserving exact-allowance transfer compatibility.
-    uint256 actualAmountOut = scaledBalanceOfSender.rayMulFloor(index) -
-      (scaledBalanceOfSender - scaledAmount).rayMulFloor(index);
-
-    _spendAllowance(sender, _msgSender(), castAmount, actualAmountOut);
-
-    _transfer(sender, recipient, castAmount);
+    _transfer(sender, recipient, amount.toUint128(), true);
 
     return true;
+  }
+
+  /**
+   * @notice Updates `owner`'s allowance for `spender` based on `correctedAmount` spent
+   * @param owner The owner of the tokens
+   * @param spender The user allowed to spend on behalf of the owner
+   * @param rebasedAmount The nominal amount being transferred
+   */
+  function _spendAllowance(address owner, address spender, uint256 rebasedAmount) internal virtual {
+    uint256 currentAllowance = _allowances[owner][spender];
+    if (currentAllowance < rebasedAmount) {
+      revert ERC20InsufficientAllowance(spender, currentAllowance, rebasedAmount);
+    }
+
+    uint256 index = POOL.getReserveNormalizedIncome(_underlyingAsset);
+    uint256 scaledBalance = _scaledBalanceOf(owner);
+    uint256 scaledAmount = _getScaledAmount(rebasedAmount, index);
+    uint256 startingRebasedBalance = _getRebasedAmount(scaledBalance, index);
+    uint256 endingRebasedBalance = _getRebasedAmount(scaledBalance - scaledAmount, index);
+
+    // Consume allowance based on the owner's actual balance decrease rather than `rebasedAmount`
+    // (inspired by Aave v3.5). Because the scaled amount is rounded up, the owner's balance can
+    // drop by slightly more than `rebasedAmount`, so we measure the real decrease from the
+    // resulting scaled balance to keep the invariant: allowance consumed == balance transferred.
+    // The consumption is capped at the current allowance.
+    uint256 rebasedBalanceDecrease = startingRebasedBalance - endingRebasedBalance;
+
+    uint256 consumption = currentAllowance >= rebasedBalanceDecrease
+      ? rebasedBalanceDecrease
+      : currentAllowance;
+    _approve(owner, spender, currentAllowance - consumption);
   }
 
   /**
@@ -220,34 +247,36 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
    * (ie checks for valid HF after the transfer) if required
    * @param from The source address
    * @param to The destination address
-   * @param amount The amount getting transferred
+   * @param rebasedAmount The amount getting transferred
    * @param validate True if the transfer needs to be validated, false otherwise
    */
-  function _transfer(address from, address to, uint256 amount, bool validate) internal virtual {
+  function _transfer(
+    address from,
+    address to,
+    uint256 rebasedAmount,
+    bool validate
+  ) internal virtual {
     address underlyingAsset = _underlyingAsset;
 
     uint256 index = POOL.getReserveNormalizedIncome(underlyingAsset);
 
-    uint256 fromBalanceBefore = super.balanceOf(from).rayMulFloor(index);
-    uint256 toBalanceBefore = super.balanceOf(to).rayMulFloor(index);
+    uint256 senderStartingRebasedBalance = _getRebasedAmount(_scaledBalanceOf(from), index);
+    uint256 recipientStartingRebasedBalance = _getRebasedAmount(_scaledBalanceOf(to), index);
 
-    super._transfer(from, to, amount, index);
+    _transferScaled(from, to, rebasedAmount, index);
 
     if (validate) {
-      POOL.finalizeTransfer(underlyingAsset, from, to, amount, fromBalanceBefore, toBalanceBefore);
+      POOL.finalizeTransfer(
+        underlyingAsset,
+        from,
+        to,
+        rebasedAmount,
+        senderStartingRebasedBalance,
+        recipientStartingRebasedBalance
+      );
     }
 
-    emit BalanceTransfer(from, to, amount.rayDivCeil(index), index);
-  }
-
-  /**
-   * @notice Overrides the parent _transfer to force validated transfer() and transferFrom()
-   * @param from The source address
-   * @param to The destination address
-   * @param amount The amount getting transferred
-   */
-  function _transfer(address from, address to, uint128 amount) internal virtual override {
-    _transfer(from, to, amount, true);
+    emit BalanceTransfer(from, to, _getScaledAmount(rebasedAmount, index), index);
   }
 
   /**
@@ -275,5 +304,13 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
   function rescueTokens(address token, address to, uint256 amount) external override onlyPoolAdmin {
     require(token != _underlyingAsset, Errors.UNDERLYING_CANNOT_BE_RESCUED);
     IERC20(token).safeTransfer(to, amount);
+  }
+
+  function _getScaledAmount(uint256 rebasedAmount, uint256 index) internal pure returns (uint256) {
+    return _getScaledAmount(rebasedAmount, index, RoundingMode.ROUND_UP);
+  }
+
+  function _getRebasedAmount(uint256 scaledAmount, uint256 index) internal pure returns (uint256) {
+    return scaledAmount.rayMulFloor(index);
   }
 }

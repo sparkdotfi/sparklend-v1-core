@@ -60,7 +60,7 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
   mapping(address => UserState) internal _userState;
 
   // Map of allowances (delegator => delegatee => allowanceAmount)
-  mapping(address => mapping(address => uint256)) private _allowances;
+  mapping(address => mapping(address => uint256)) internal _allowances;
 
   uint256 internal _totalSupply;
   string private _name;
@@ -100,16 +100,6 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
     return _decimals;
   }
 
-  /// @inheritdoc IERC20
-  function totalSupply() public view virtual override returns (uint256) {
-    return _totalSupply;
-  }
-
-  /// @inheritdoc IERC20
-  function balanceOf(address account) public view virtual override returns (uint256) {
-    return _userState[account].balance;
-  }
-
   /**
    * @notice Returns the address of the Incentives Controller contract
    * @return The address of the Incentives Controller
@@ -127,13 +117,6 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
   }
 
   /// @inheritdoc IERC20
-  function transfer(address recipient, uint256 amount) external virtual override returns (bool) {
-    uint128 castAmount = amount.toUint128();
-    _transfer(_msgSender(), recipient, castAmount);
-    return true;
-  }
-
-  /// @inheritdoc IERC20
   function allowance(
     address owner,
     address spender
@@ -144,18 +127,6 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
   /// @inheritdoc IERC20
   function approve(address spender, uint256 amount) external virtual override returns (bool) {
     _approve(_msgSender(), spender, amount);
-    return true;
-  }
-
-  /// @inheritdoc IERC20
-  function transferFrom(
-    address sender,
-    address recipient,
-    uint256 amount
-  ) external virtual override returns (bool) {
-    uint128 castAmount = amount.toUint128();
-    _approve(sender, _msgSender(), _allowances[sender][_msgSender()] - castAmount);
-    _transfer(sender, recipient, castAmount);
     return true;
   }
 
@@ -184,59 +155,23 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
     return true;
   }
 
-  /**
-   * @notice Transfers tokens between two users and apply incentives if defined.
-   * @param sender The source address
-   * @param recipient The destination address
-   * @param amount The amount getting transferred
-   */
-  function _transfer(address sender, address recipient, uint128 amount) internal virtual {
-    uint128 oldSenderBalance = _userState[sender].balance;
-    _userState[sender].balance = oldSenderBalance - amount;
-    uint128 oldRecipientBalance = _userState[recipient].balance;
-    _userState[recipient].balance = oldRecipientBalance + amount;
+  function _scaledBalanceOf(address account) internal view returns (uint256) {
+    return _userState[account].balance;
+  }
 
-    IAaveIncentivesController incentivesControllerLocal = _incentivesController;
-    if (address(incentivesControllerLocal) != address(0)) {
-      uint256 currentTotalSupply = _totalSupply;
-      incentivesControllerLocal.handleAction(sender, currentTotalSupply, oldSenderBalance);
-      if (sender != recipient) {
-        incentivesControllerLocal.handleAction(recipient, currentTotalSupply, oldRecipientBalance);
-      }
-    }
+  function _scaledTotalSupply() internal view returns (uint256) {
+    return _totalSupply;
   }
 
   /**
-   * @notice Updates `owner`'s allowance for `spender` based on `correctedAmount` spent
-   * @param owner The owner of the tokens
-   * @param spender The user allowed to spend on behalf of the owner
-   * @param amount The minimum amount being consumed from the allowance
-   * @param correctedAmount The maximum amount being consumed from the allowance
-   */
-  function _spendAllowance(
-    address owner,
-    address spender,
-    uint256 amount,
-    uint256 correctedAmount
-  ) internal virtual {
-    uint256 currentAllowance = _allowances[owner][spender];
-    if (currentAllowance < amount) {
-      revert ERC20InsufficientAllowance(spender, currentAllowance, amount);
-    }
-
-    uint256 consumption = currentAllowance >= correctedAmount ? correctedAmount : currentAllowance;
-    _approve(owner, spender, currentAllowance - consumption);
-  }
-
-  /**
-   * @notice Approve `spender` to use `amount` of `owner`s balance
+   * @notice Approve `spender` to use `rebasedAmount` of `owner`s balance
    * @param owner The address owning the tokens
    * @param spender The address approved for spending
-   * @param amount The amount of tokens to approve spending of
+   * @param rebasedAmount The amount of tokens to approve spending of
    */
-  function _approve(address owner, address spender, uint256 amount) internal virtual {
-    _allowances[owner][spender] = amount;
-    emit Approval(owner, spender, amount);
+  function _approve(address owner, address spender, uint256 rebasedAmount) internal virtual {
+    _allowances[owner][spender] = rebasedAmount;
+    emit Approval(owner, spender, rebasedAmount);
   }
 
   /**
