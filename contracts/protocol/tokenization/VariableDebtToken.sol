@@ -166,7 +166,7 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
   }
 
   function _getScaledAmount(uint256 rebasedAmount, uint256 index) internal pure returns (uint256) {
-    _getScaledAmount(rebasedAmount, index, RoundingMode.ROUND_UP);
+    return _getScaledAmount(rebasedAmount, index, RoundingMode.ROUND_UP);
   }
 
   /**
