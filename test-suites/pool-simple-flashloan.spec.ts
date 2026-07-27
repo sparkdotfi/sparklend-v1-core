@@ -109,11 +109,10 @@ makeSuite('Pool: Simple FlashLoan', (testEnv: TestEnv) => {
 
     expect(wethTotalLiquidityBefore.add(wethTotalFees)).to.be.closeTo(wethTotalLiquidityAfter, 2);
     expect(wethCurrentLiquidityRate).to.be.equal(0);
-    expect(wethCurrentLiquidityIndex).to.be.closeTo(
-      wethLiquidityIndexBefore.add(wethLiquidityIndexAdded),
-      1
+    expect(wethCurrentLiquidityIndex).to.be.equal(
+      wethLiquidityIndexBefore.add(wethLiquidityIndexAdded)
     );
-    expect(wethReservesAfter).to.be.closeTo(wethReservesBefore.add(wethFeesToProtocol), 1);
+    expect(wethReservesAfter.add(1)).to.be.equal(wethReservesBefore.add(wethFeesToProtocol));
 
     // Check event values for `ReserveDataUpdated`
     const reserveDataUpdatedEvents = tx.events?.filter(
@@ -176,7 +175,7 @@ makeSuite('Pool: Simple FlashLoan', (testEnv: TestEnv) => {
     const reservesAfter = await aWETH.balanceOf(await aWETH.RESERVE_TREASURY_ADDRESS());
     expect(totalLiquidityBefore.add(totalFees)).to.be.closeTo(totalLiquidityAfter, 2);
     expect(currentLiquidityRate).to.be.equal(0);
-    expect(currentLiquidityIndex).to.be.closeTo(liquidityIndexBefore.add(liquidityIndexAdded), 1);
+    expect(currentLiquidityIndex).to.be.equal(liquidityIndexBefore.add(liquidityIndexAdded).add(1));
     expect(
       reservesAfter.sub(feesToProtocol).mul(liquidityIndexBefore).div(currentLiquidityIndex)
     ).to.be.equal(reservesBefore);
@@ -323,8 +322,8 @@ makeSuite('Pool: Simple FlashLoan', (testEnv: TestEnv) => {
 
     expect(totalLiquidityBefore.add(totalFees)).to.be.closeTo(totalLiquidityAfter, 2);
     expect(currentLiquidityRate).to.be.equal(0);
-    expect(currentLiquidityIndex).to.be.closeTo(liquidityIndexBefore.add(liquidityIndexAdded), 1);
-    expect(reservesAfter).to.be.closeTo(reservesBefore.add(feesToProtocol), 1);
+    expect(currentLiquidityIndex).to.be.equal(liquidityIndexBefore.add(liquidityIndexAdded));
+    expect(reservesAfter.add(1)).to.be.equal(reservesBefore.add(feesToProtocol));
   });
 
   it('Takes out a 500 USDC flashloan with mode = 0, does not return the funds (revert expected)', async () => {
