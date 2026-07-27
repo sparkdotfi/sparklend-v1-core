@@ -232,9 +232,8 @@ makeSuite('VariableDebtToken: Events', (testEnv: TestEnv) => {
     updateBalances(balances, variableDebtDai, rcpt);
     const aliceBalanceAfter = await variableDebtDai.balanceOf(alice.address);
 
-    expect(aliceBalanceAfter).to.be.closeTo(
-      aliceBalanceBefore.add(balances.balance[alice.address]),
-      7
+    expect(aliceBalanceAfter).to.be.equal(
+      aliceBalanceBefore.add(balances.balance[alice.address]).add(indexChange ? 6 : 4)
     );
   };
 
@@ -346,11 +345,10 @@ makeSuite('VariableDebtToken: Events', (testEnv: TestEnv) => {
     updateBalances(balances, variableDebtDai, rcpt);
     const bobBalanceAfter = await variableDebtDai.balanceOf(bob.address);
 
-    expect(aliceBalanceAfter).to.be.closeTo(
-      aliceBalanceBefore.add(balances.balance[alice.address]),
-      18
+    expect(aliceBalanceAfter).to.be.equal(
+      aliceBalanceBefore.add(balances.balance[alice.address]).add(indexChange ? 18 : 3)
     );
-    expect(bobBalanceAfter).to.be.closeTo(bobBalanceBefore.add(balances.balance[bob.address]), 17);
+    expect(bobBalanceAfter).to.be.equal(bobBalanceBefore.add(balances.balance[bob.address]).add(3));
   };
 
   it('Alice borrows 100 DAI, Bob borrows 100 DAI on behalf of Alice, Bob borrows 50 DAI, Alice borrows 50 DAI, repays 250 DAI and repays 50 DAI on behalf of Bob, borrows 10 DAI more (without index change)', async () => {
@@ -462,10 +460,11 @@ makeSuite('VariableDebtToken: Events', (testEnv: TestEnv) => {
     updateBalances(balances, variableDebtDai, rcpt);
     const bobBalanceAfter = await variableDebtDai.balanceOf(bob.address);
 
-    expect(aliceBalanceAfter).to.be.closeTo(
-      aliceBalanceBefore.add(balances.balance[alice.address]),
-      21
+    expect(aliceBalanceAfter).to.be.equal(
+      aliceBalanceBefore.add(balances.balance[alice.address]).add(indexChange ? 21 : 2)
     );
-    expect(bobBalanceAfter).to.be.closeTo(bobBalanceBefore.add(balances.balance[bob.address]), 15);
+    expect(bobBalanceAfter).to.be.equal(
+      bobBalanceBefore.add(balances.balance[bob.address]).add(indexChange ? 15 : 1)
+    );
   };
 });
