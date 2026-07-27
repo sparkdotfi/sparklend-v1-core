@@ -166,36 +166,6 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
   }
 
   /**
-   * @notice Transfers tokens between two users and apply incentives if defined.
-   * @param sender The source address
-   * @param recipient The destination address
-   * @param scaledAmount The amount getting transferred
-   */
-  function _transferScaled(
-    address sender,
-    address recipient,
-    uint128 scaledAmount
-  ) internal virtual {
-    uint128 oldSenderScaledBalance = _userState[sender].balance;
-    _userState[sender].balance = oldSenderScaledBalance - scaledAmount;
-    uint128 oldRecipientScaledBalance = _userState[recipient].balance;
-    _userState[recipient].balance = oldRecipientScaledBalance + scaledAmount;
-
-    IAaveIncentivesController incentivesControllerLocal = _incentivesController;
-    if (address(incentivesControllerLocal) != address(0)) {
-      uint256 currentTotalSupply = _totalSupply;
-      incentivesControllerLocal.handleAction(sender, currentTotalSupply, oldSenderScaledBalance);
-      if (sender != recipient) {
-        incentivesControllerLocal.handleAction(
-          recipient,
-          currentTotalSupply,
-          oldRecipientScaledBalance
-        );
-      }
-    }
-  }
-
-  /**
    * @notice Approve `spender` to use `rebasedAmount` of `owner`s balance
    * @param owner The address owning the tokens
    * @param spender The address approved for spending

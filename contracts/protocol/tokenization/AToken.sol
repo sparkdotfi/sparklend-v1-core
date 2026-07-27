@@ -265,7 +265,7 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     uint256 senderStartingRebasedBalance = _getRebasedAmount(super.balanceOf(from), index);
     uint256 recipientStartingRebasedBalance = _getRebasedAmount(super.balanceOf(to), index);
 
-    super._transfer(from, to, rebasedAmount, index);
+    _transferScaled(from, to, rebasedAmount, index);
 
     if (validate) {
       POOL.finalizeTransfer(

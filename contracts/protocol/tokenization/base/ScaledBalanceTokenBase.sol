@@ -4,16 +4,18 @@ pragma solidity ^0.8.10;
 import {SafeCast} from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
 import {Errors} from '../../libraries/helpers/Errors.sol';
 import {WadRayMath} from '../../libraries/math/WadRayMath.sol';
+
+import {IAaveIncentivesController} from '../../../interfaces/IAaveIncentivesController.sol';
 import {IPool} from '../../../interfaces/IPool.sol';
 import {IScaledBalanceToken} from '../../../interfaces/IScaledBalanceToken.sol';
-import {MintableIncentivizedERC20} from './MintableIncentivizedERC20.sol';
+import {IncentivizedERC20} from './IncentivizedERC20.sol';
 
 /**
  * @title ScaledBalanceTokenBase
  * @author Aave
  * @notice Basic ERC20 implementation of scaled balance token
  */
-abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBalanceToken {
+abstract contract ScaledBalanceTokenBase is IncentivizedERC20, IScaledBalanceToken {
   using WadRayMath for uint256;
   using SafeCast for uint256;
 
@@ -35,25 +37,25 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     string memory name,
     string memory symbol,
     uint8 decimals
-  ) MintableIncentivizedERC20(pool, name, symbol, decimals) {
+  ) IncentivizedERC20(pool, name, symbol, decimals) {
     // Intentionally left blank
   }
 
   /// @inheritdoc IScaledBalanceToken
   function scaledBalanceOf(address user) external view override returns (uint256) {
-    return super.balanceOf(user);
+    return _userState[user].balance;
   }
 
   /// @inheritdoc IScaledBalanceToken
   function getScaledUserBalanceAndSupply(
     address user
   ) external view override returns (uint256, uint256) {
-    return (super.balanceOf(user), super.totalSupply());
+    return (_userState[user].balance, _totalSupply);
   }
 
   /// @inheritdoc IScaledBalanceToken
   function scaledTotalSupply() public view virtual override returns (uint256) {
-    return super.totalSupply();
+    return _totalSupply;
   }
 
   /// @inheritdoc IScaledBalanceToken
@@ -76,23 +78,32 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     uint256 index,
     RoundingMode roundingMode
   ) internal returns (bool) {
-    uint256 amountScaled = _getScaledAmount(rebasedAmount, index, roundingMode);
-    require(amountScaled != 0, Errors.INVALID_MINT_AMOUNT);
+    uint128 scaledAmount = _getScaledAmount(rebasedAmount, index, roundingMode).toUint128();
+    require(scaledAmount != 0, Errors.INVALID_MINT_AMOUNT);
 
-    uint256 scaledBalance = super.balanceOf(onBehalfOf);
+    uint256 oldScaledBalance = _userState[onBehalfOf].balance;
 
-    uint256 rebasedAccruedBalance = scaledBalance.rayMul(index) -
-      scaledBalance.rayMul(_userState[onBehalfOf].additionalData);
+    // Since the last moment the account's balance was altered, it has accrued balance that needs to
+    // be reflected in the `Transfer` and `Mint` events in addition to the amount being minted.
+    uint256 accruedRebasedBalance = oldScaledBalance.rayMul(index) -
+      oldScaledBalance.rayMul(_userState[onBehalfOf].additionalData);
 
     _userState[onBehalfOf].additionalData = index.toUint128();
 
-    _mint(onBehalfOf, amountScaled.toUint128());
+    uint256 oldScaledTotalSupply = _totalSupply;
 
-    uint256 rebasedAmountToMint = rebasedAmount + rebasedAccruedBalance;
+    _totalSupply = oldScaledTotalSupply + scaledAmount;
+    _userState[onBehalfOf].balance = oldScaledBalance.toUint128() + scaledAmount;
+
+    if (address(_incentivesController) != address(0)) {
+      _incentivesController.handleAction(onBehalfOf, oldScaledTotalSupply, oldScaledBalance);
+    }
+
+    uint256 rebasedAmountToMint = rebasedAmount + accruedRebasedBalance;
     emit Transfer(address(0), onBehalfOf, rebasedAmountToMint);
-    emit Mint(caller, onBehalfOf, rebasedAmountToMint, rebasedAccruedBalance, index);
+    emit Mint(caller, onBehalfOf, rebasedAmountToMint, accruedRebasedBalance, index);
 
-    return (scaledBalance == 0);
+    return (oldScaledBalance == 0);
   }
 
   /**
@@ -111,25 +122,36 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     uint256 index,
     RoundingMode roundingMode
   ) internal {
-    uint256 amountScaled = _getScaledAmount(rebasedAmount, index, roundingMode);
-    require(amountScaled != 0, Errors.INVALID_BURN_AMOUNT);
+    uint128 scaledAmount = _getScaledAmount(rebasedAmount, index, roundingMode).toUint128();
+    require(scaledAmount != 0, Errors.INVALID_BURN_AMOUNT);
 
-    uint256 scaledBalance = super.balanceOf(user);
-    uint256 rebasedAccruedBalance = scaledBalance.rayMul(index) -
-      scaledBalance.rayMul(_userState[user].additionalData);
+    uint256 oldScaledBalance = _userState[user].balance;
+
+    // Since the last moment the account's balance was altered, it has accrued balance that needs to
+    // be reflected in the `Transfer` and `Burn`/`Mint` events in addition to the amount being
+    // burned.
+    uint256 accruedRebasedBalance = oldScaledBalance.rayMul(index) -
+      oldScaledBalance.rayMul(_userState[user].additionalData);
 
     _userState[user].additionalData = index.toUint128();
 
-    _burn(user, amountScaled.toUint128());
+    uint256 oldScaledTotalSupply = _totalSupply;
 
-    if (rebasedAccruedBalance > rebasedAmount) {
-      uint256 rebasedAmountToMint = rebasedAccruedBalance - rebasedAmount;
+    _totalSupply = oldScaledTotalSupply - scaledAmount;
+    _userState[user].balance = oldScaledBalance.toUint128() - scaledAmount;
+
+    if (address(_incentivesController) != address(0)) {
+      _incentivesController.handleAction(user, oldScaledTotalSupply, oldScaledBalance);
+    }
+
+    if (accruedRebasedBalance > rebasedAmount) {
+      uint256 rebasedAmountToMint = accruedRebasedBalance - rebasedAmount;
       emit Transfer(address(0), user, rebasedAmountToMint);
-      emit Mint(user, user, rebasedAmountToMint, rebasedAccruedBalance, index);
+      emit Mint(user, user, rebasedAmountToMint, accruedRebasedBalance, index);
     } else {
-      uint256 rebasedAmountToBurn = rebasedAmount - rebasedAccruedBalance;
+      uint256 rebasedAmountToBurn = rebasedAmount - accruedRebasedBalance;
       emit Transfer(user, address(0), rebasedAmountToBurn);
-      emit Burn(user, target, rebasedAmountToBurn, rebasedAccruedBalance, index);
+      emit Burn(user, target, rebasedAmountToBurn, accruedRebasedBalance, index);
     }
   }
 
@@ -142,47 +164,60 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    * @param rebasedAmount The amount getting transferred
    * @param index The next liquidity index of the reserve
    */
-  function _transfer(
+  function _transferScaled(
     address sender,
     address recipient,
     uint256 rebasedAmount,
     uint256 index
   ) internal {
-    uint256 senderScaledBalance = super.balanceOf(sender);
-    uint256 senderRebasedAccruedBalance = senderScaledBalance.rayMul(index) -
-      senderScaledBalance.rayMul(_userState[sender].additionalData);
+    uint128 scaledAmount = _getScaledAmount(rebasedAmount, index, RoundingMode.ROUND_UP)
+      .toUint128();
 
-    uint256 recipientScaledBalance = super.balanceOf(recipient);
-    uint256 recipientRebasedAccruedBalance = recipientScaledBalance.rayMul(index) -
-      recipientScaledBalance.rayMul(_userState[recipient].additionalData);
+    uint256 senderScaledOldBalance = _userState[sender].balance;
+    uint256 senderAccruedRebasedBalance = senderScaledOldBalance.rayMul(index) -
+      senderScaledOldBalance.rayMul(_userState[sender].additionalData);
+
+    _userState[sender].balance = senderScaledOldBalance.toUint128() - scaledAmount;
+
+    uint256 recipientScaledOldBalance = _userState[recipient].balance;
+    uint256 recipientAccruedRebasedBalance = recipientScaledOldBalance.rayMul(index) -
+      recipientScaledOldBalance.rayMul(_userState[recipient].additionalData);
+
+    _userState[recipient].balance = recipientScaledOldBalance.toUint128() + scaledAmount;
 
     _userState[sender].additionalData = index.toUint128();
     _userState[recipient].additionalData = index.toUint128();
 
-    super._transferScaled(
-      sender,
-      recipient,
-      _getScaledAmount(rebasedAmount, index, RoundingMode.ROUND_UP).toUint128()
-    );
+    if (address(_incentivesController) != address(0)) {
+      uint256 currentTotalSupply = _totalSupply;
+      _incentivesController.handleAction(sender, currentTotalSupply, senderScaledOldBalance);
+      if (sender != recipient) {
+        _incentivesController.handleAction(
+          recipient,
+          currentTotalSupply,
+          recipientScaledOldBalance
+        );
+      }
+    }
 
-    if (senderRebasedAccruedBalance > 0) {
-      emit Transfer(address(0), sender, senderRebasedAccruedBalance);
+    if (senderAccruedRebasedBalance > 0) {
+      emit Transfer(address(0), sender, senderAccruedRebasedBalance);
       emit Mint(
         _msgSender(),
         sender,
-        senderRebasedAccruedBalance,
-        senderRebasedAccruedBalance,
+        senderAccruedRebasedBalance,
+        senderAccruedRebasedBalance,
         index
       );
     }
 
-    if (sender != recipient && recipientRebasedAccruedBalance > 0) {
-      emit Transfer(address(0), recipient, recipientRebasedAccruedBalance);
+    if (sender != recipient && recipientAccruedRebasedBalance > 0) {
+      emit Transfer(address(0), recipient, recipientAccruedRebasedBalance);
       emit Mint(
         _msgSender(),
         recipient,
-        recipientRebasedAccruedBalance,
-        recipientRebasedAccruedBalance,
+        recipientAccruedRebasedBalance,
+        recipientAccruedRebasedBalance,
         index
       );
     }
