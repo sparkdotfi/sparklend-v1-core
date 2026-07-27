@@ -65,31 +65,32 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    * @notice Implements the basic logic to mint a scaled balance token.
    * @param caller The address performing the mint
    * @param onBehalfOf The address of the user that will receive the scaled tokens
-   * @param amount The amount of tokens getting minted
+   * @param rebasedAmount The amount of tokens getting minted
    * @param index The next liquidity index of the reserve
    * @return `true` if the the previous balance of the user was 0
    */
   function _mintScaled(
     address caller,
     address onBehalfOf,
-    uint256 amount,
+    uint256 rebasedAmount,
     uint256 index,
     RoundingMode roundingMode
   ) internal returns (bool) {
-    uint256 amountScaled = _roundScaledAmount(amount, index, roundingMode);
+    uint256 amountScaled = _getScaledAmount(rebasedAmount, index, roundingMode);
     require(amountScaled != 0, Errors.INVALID_MINT_AMOUNT);
 
     uint256 scaledBalance = super.balanceOf(onBehalfOf);
-    uint256 balanceIncrease = scaledBalance.rayMul(index) -
+
+    uint256 rebasedAccruedBalance = scaledBalance.rayMul(index) -
       scaledBalance.rayMul(_userState[onBehalfOf].additionalData);
 
     _userState[onBehalfOf].additionalData = index.toUint128();
 
     _mint(onBehalfOf, amountScaled.toUint128());
 
-    uint256 amountToMint = amount + balanceIncrease;
-    emit Transfer(address(0), onBehalfOf, amountToMint);
-    emit Mint(caller, onBehalfOf, amountToMint, balanceIncrease, index);
+    uint256 rebasedAmountToMint = rebasedAmount + rebasedAccruedBalance;
+    emit Transfer(address(0), onBehalfOf, rebasedAmountToMint);
+    emit Mint(caller, onBehalfOf, rebasedAmountToMint, rebasedAccruedBalance, index);
 
     return (scaledBalance == 0);
   }
@@ -100,35 +101,35 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    * if the amount to burn is less than the interest that the user accrued
    * @param user The user which debt is burnt
    * @param target The address that will receive the underlying, if any
-   * @param amount The amount getting burned
+   * @param rebasedAmount The amount getting burned
    * @param index The variable debt index of the reserve
    */
   function _burnScaled(
     address user,
     address target,
-    uint256 amount,
+    uint256 rebasedAmount,
     uint256 index,
     RoundingMode roundingMode
   ) internal {
-    uint256 amountScaled = _roundScaledAmount(amount, index, roundingMode);
+    uint256 amountScaled = _getScaledAmount(rebasedAmount, index, roundingMode);
     require(amountScaled != 0, Errors.INVALID_BURN_AMOUNT);
 
     uint256 scaledBalance = super.balanceOf(user);
-    uint256 balanceIncrease = scaledBalance.rayMul(index) -
+    uint256 rebasedAccruedBalance = scaledBalance.rayMul(index) -
       scaledBalance.rayMul(_userState[user].additionalData);
 
     _userState[user].additionalData = index.toUint128();
 
     _burn(user, amountScaled.toUint128());
 
-    if (balanceIncrease > amount) {
-      uint256 amountToMint = balanceIncrease - amount;
-      emit Transfer(address(0), user, amountToMint);
-      emit Mint(user, user, amountToMint, balanceIncrease, index);
+    if (rebasedAccruedBalance > rebasedAmount) {
+      uint256 rebasedAmountToMint = rebasedAccruedBalance - rebasedAmount;
+      emit Transfer(address(0), user, rebasedAmountToMint);
+      emit Mint(user, user, rebasedAmountToMint, rebasedAccruedBalance, index);
     } else {
-      uint256 amountToBurn = amount - balanceIncrease;
-      emit Transfer(user, address(0), amountToBurn);
-      emit Burn(user, target, amountToBurn, balanceIncrease, index);
+      uint256 rebasedAmountToBurn = rebasedAmount - rebasedAccruedBalance;
+      emit Transfer(user, address(0), rebasedAmountToBurn);
+      emit Burn(user, target, rebasedAmountToBurn, rebasedAccruedBalance, index);
     }
   }
 
@@ -138,46 +139,81 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    * @dev The scaled transfer amount is rounded up so the recipient receives at least the requested amount
    * @param sender The source address
    * @param recipient The destination address
-   * @param amount The amount getting transferred
+   * @param rebasedAmount The amount getting transferred
    * @param index The next liquidity index of the reserve
    */
-  function _transfer(address sender, address recipient, uint256 amount, uint256 index) internal {
+  function _transfer(
+    address sender,
+    address recipient,
+    uint256 rebasedAmount,
+    uint256 index
+  ) internal {
     uint256 senderScaledBalance = super.balanceOf(sender);
-    uint256 senderBalanceIncrease = senderScaledBalance.rayMul(index) -
+    uint256 senderRebasedAccruedBalance = senderScaledBalance.rayMul(index) -
       senderScaledBalance.rayMul(_userState[sender].additionalData);
 
     uint256 recipientScaledBalance = super.balanceOf(recipient);
-    uint256 recipientBalanceIncrease = recipientScaledBalance.rayMul(index) -
+    uint256 recipientRebasedAccruedBalance = recipientScaledBalance.rayMul(index) -
       recipientScaledBalance.rayMul(_userState[recipient].additionalData);
 
     _userState[sender].additionalData = index.toUint128();
     _userState[recipient].additionalData = index.toUint128();
 
-    super._transfer(sender, recipient, amount.rayDivCeil(index).toUint128());
+    super._transferScaled(
+      sender,
+      recipient,
+      _getScaledAmount(rebasedAmount, index, RoundingMode.ROUND_UP).toUint128()
+    );
 
-    if (senderBalanceIncrease > 0) {
-      emit Transfer(address(0), sender, senderBalanceIncrease);
-      emit Mint(_msgSender(), sender, senderBalanceIncrease, senderBalanceIncrease, index);
+    if (senderRebasedAccruedBalance > 0) {
+      emit Transfer(address(0), sender, senderRebasedAccruedBalance);
+      emit Mint(
+        _msgSender(),
+        sender,
+        senderRebasedAccruedBalance,
+        senderRebasedAccruedBalance,
+        index
+      );
     }
 
-    if (sender != recipient && recipientBalanceIncrease > 0) {
-      emit Transfer(address(0), recipient, recipientBalanceIncrease);
-      emit Mint(_msgSender(), recipient, recipientBalanceIncrease, recipientBalanceIncrease, index);
+    if (sender != recipient && recipientRebasedAccruedBalance > 0) {
+      emit Transfer(address(0), recipient, recipientRebasedAccruedBalance);
+      emit Mint(
+        _msgSender(),
+        recipient,
+        recipientRebasedAccruedBalance,
+        recipientRebasedAccruedBalance,
+        index
+      );
     }
 
-    emit Transfer(sender, recipient, amount);
+    emit Transfer(sender, recipient, rebasedAmount);
   }
 
-  function _roundScaledAmount(
+  function _getScaledAmount(
+    uint256 rebasedAmount,
+    uint256 index,
+    RoundingMode roundingMode
+  ) internal pure returns (uint256) {
+    if (roundingMode == RoundingMode.ROUND_DOWN) {
+      return rebasedAmount.rayDivFloor(index);
+    }
+    if (roundingMode == RoundingMode.ROUND_UP) {
+      return rebasedAmount.rayDivCeil(index);
+    }
+    revert('Invalid Rounding Mode');
+  }
+
+  function _getRebasedAmount(
     uint256 amount,
     uint256 index,
     RoundingMode roundingMode
-  ) private pure returns (uint256) {
+  ) internal pure returns (uint256) {
     if (roundingMode == RoundingMode.ROUND_DOWN) {
-      return amount.rayDivFloor(index);
+      return amount.rayMulFloor(index);
     }
     if (roundingMode == RoundingMode.ROUND_UP) {
-      return amount.rayDivCeil(index);
+      return amount.rayMulCeil(index);
     }
     revert('Invalid Rounding Mode');
   }

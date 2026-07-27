@@ -385,4 +385,23 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
   function decreaseAllowance(address, uint256) external virtual override returns (bool) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
+
+  /**
+   * @notice Decreases the borrow allowance of a user on the specific debt token.
+   * @param delegator The address delegating the borrowing power
+   * @param delegatee The address receiving the delegated borrowing power
+   * @param amount The minimum amount to subtract from the current allowance
+   */
+  function _decreaseBorrowAllowance(address delegator, address delegatee, uint256 amount) internal {
+    uint256 currentAllowance = _borrowAllowances[delegator][delegatee];
+    if (currentAllowance < amount) {
+      revert InsufficientBorrowAllowance(delegatee, currentAllowance, amount);
+    }
+
+    uint256 newAllowance = currentAllowance - amount;
+
+    _borrowAllowances[delegator][delegatee] = newAllowance;
+
+    emit BorrowAllowanceDelegated(delegator, delegatee, _underlyingAsset, newAllowance);
+  }
 }

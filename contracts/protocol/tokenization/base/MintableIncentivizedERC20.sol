@@ -30,37 +30,37 @@ abstract contract MintableIncentivizedERC20 is IncentivizedERC20 {
   /**
    * @notice Mints tokens to an account and apply incentives if defined
    * @param account The address receiving tokens
-   * @param amount The amount of tokens to mint
+   * @param scaledAmount The amount of tokens to mint
    */
-  function _mint(address account, uint128 amount) internal virtual {
-    uint256 oldTotalSupply = _totalSupply;
-    _totalSupply = oldTotalSupply + amount;
+  function _mint(address account, uint128 scaledAmount) internal virtual {
+    uint256 oldScaledTotalSupply = _totalSupply;
+    _totalSupply = oldScaledTotalSupply + scaledAmount;
 
-    uint128 oldAccountBalance = _userState[account].balance;
-    _userState[account].balance = oldAccountBalance + amount;
+    uint128 oldScaledBalance = _userState[account].balance;
+    _userState[account].balance = oldScaledBalance + scaledAmount;
 
     IAaveIncentivesController incentivesControllerLocal = _incentivesController;
     if (address(incentivesControllerLocal) != address(0)) {
-      incentivesControllerLocal.handleAction(account, oldTotalSupply, oldAccountBalance);
+      incentivesControllerLocal.handleAction(account, oldScaledTotalSupply, oldScaledBalance);
     }
   }
 
   /**
    * @notice Burns tokens from an account and apply incentives if defined
    * @param account The account whose tokens are burnt
-   * @param amount The amount of tokens to burn
+   * @param scaledAmount The amount of tokens to burn
    */
-  function _burn(address account, uint128 amount) internal virtual {
-    uint256 oldTotalSupply = _totalSupply;
-    _totalSupply = oldTotalSupply - amount;
+  function _burn(address account, uint128 scaledAmount) internal virtual {
+    uint256 oldScaledTotalSupply = _totalSupply;
+    _totalSupply = oldScaledTotalSupply - scaledAmount;
 
-    uint128 oldAccountBalance = _userState[account].balance;
-    _userState[account].balance = oldAccountBalance - amount;
+    uint128 oldScaledBalance = _userState[account].balance;
+    _userState[account].balance = oldScaledBalance - scaledAmount;
 
     IAaveIncentivesController incentivesControllerLocal = _incentivesController;
 
     if (address(incentivesControllerLocal) != address(0)) {
-      incentivesControllerLocal.handleAction(account, oldTotalSupply, oldAccountBalance);
+      incentivesControllerLocal.handleAction(account, oldScaledTotalSupply, oldScaledBalance);
     }
   }
 }
