@@ -98,8 +98,8 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
   }
 
   /// @inheritdoc IERC20
-  function balanceOf(address account) public view virtual override returns (uint256) {
-    uint256 accountBalance = super.balanceOf(account);
+  function balanceOf(address account) public view returns (uint256) {
+    uint256 accountBalance = _scaledBalanceOf(account);
     uint256 stableRate = _userState[account].additionalData;
     if (accountBalance == 0) {
       return 0;
@@ -254,7 +254,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
   function _calculateBalanceIncrease(
     address user
   ) internal view returns (uint256, uint256, uint256) {
-    uint256 previousPrincipalBalance = super.balanceOf(user);
+    uint256 previousPrincipalBalance = _scaledBalanceOf(user);
 
     if (previousPrincipalBalance == 0) {
       return (0, 0, 0);
@@ -272,7 +272,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
   /// @inheritdoc IStableDebtToken
   function getSupplyData() external view override returns (uint256, uint256, uint256, uint40) {
     uint256 avgRate = _avgStableRate;
-    return (super.totalSupply(), _calcTotalSupply(avgRate), avgRate, _totalSupplyTimestamp);
+    return (_scaledTotalSupply(), _calcTotalSupply(avgRate), avgRate, _totalSupplyTimestamp);
   }
 
   /// @inheritdoc IStableDebtToken
@@ -282,7 +282,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
   }
 
   /// @inheritdoc IERC20
-  function totalSupply() public view virtual override returns (uint256) {
+  function totalSupply() public view virtual returns (uint256) {
     return _calcTotalSupply(_avgStableRate);
   }
 
@@ -293,7 +293,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
 
   /// @inheritdoc IStableDebtToken
   function principalBalanceOf(address user) external view virtual override returns (uint256) {
-    return super.balanceOf(user);
+    return _scaledBalanceOf(user);
   }
 
   /// @inheritdoc IStableDebtToken
@@ -307,7 +307,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
    * @return The debt balance of the user since the last burn/mint action
    */
   function _calcTotalSupply(uint256 avgRate) internal view returns (uint256) {
-    uint256 principalSupply = super.totalSupply();
+    uint256 principalSupply = _scaledTotalSupply();
 
     if (principalSupply == 0) {
       return 0;

@@ -125,16 +125,14 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
   }
 
   /// @inheritdoc IERC20
-  function balanceOf(
-    address user
-  ) public view virtual override(IncentivizedERC20, IERC20) returns (uint256) {
+  function balanceOf(address user) public view returns (uint256) {
     return
-      _getRebasedAmount(super.balanceOf(user), POOL.getReserveNormalizedIncome(_underlyingAsset));
+      _getRebasedAmount(_scaledBalanceOf(user), POOL.getReserveNormalizedIncome(_underlyingAsset));
   }
 
   /// @inheritdoc IERC20
-  function totalSupply() public view virtual override(IncentivizedERC20, IERC20) returns (uint256) {
-    uint256 currentSupplyScaled = super.totalSupply();
+  function totalSupply() public view returns (uint256) {
+    uint256 currentSupplyScaled = _scaledTotalSupply();
 
     if (currentSupplyScaled == 0) {
       return 0;
@@ -226,7 +224,7 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     }
 
     uint256 index = POOL.getReserveNormalizedIncome(_underlyingAsset);
-    uint256 scaledBalance = super.balanceOf(owner);
+    uint256 scaledBalance = _scaledBalanceOf(owner);
     uint256 scaledAmount = _getScaledAmount(rebasedAmount, index);
     uint256 startingRebasedBalance = _getRebasedAmount(scaledBalance, index);
     uint256 endingRebasedBalance = _getRebasedAmount(scaledBalance - scaledAmount, index);
@@ -262,8 +260,8 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
 
     uint256 index = POOL.getReserveNormalizedIncome(underlyingAsset);
 
-    uint256 senderStartingRebasedBalance = _getRebasedAmount(super.balanceOf(from), index);
-    uint256 recipientStartingRebasedBalance = _getRebasedAmount(super.balanceOf(to), index);
+    uint256 senderStartingRebasedBalance = _getRebasedAmount(_scaledBalanceOf(from), index);
+    uint256 recipientStartingRebasedBalance = _getRebasedAmount(_scaledBalanceOf(to), index);
 
     _transferScaled(from, to, rebasedAmount, index);
 

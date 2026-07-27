@@ -77,8 +77,8 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
   }
 
   /// @inheritdoc IERC20
-  function balanceOf(address user) public view virtual override returns (uint256) {
-    uint256 scaledBalance = super.balanceOf(user);
+  function balanceOf(address user) public view returns (uint256) {
+    uint256 scaledBalance = _scaledBalanceOf(user);
 
     if (scaledBalance == 0) {
       return 0;
@@ -115,10 +115,10 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
   }
 
   /// @inheritdoc IERC20
-  function totalSupply() public view virtual override returns (uint256) {
+  function totalSupply() public view virtual returns (uint256) {
     return
       _getRebasedAmount(
-        super.totalSupply(),
+        _scaledTotalSupply(),
         POOL.getReserveNormalizedVariableDebt(_underlyingAsset)
       );
   }
@@ -187,7 +187,7 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
       revert InsufficientBorrowAllowance(delegatee, currentAllowance, rebasedAmount);
     }
 
-    uint256 scaledBalance = super.balanceOf(delegator);
+    uint256 scaledBalance = _scaledBalanceOf(delegator);
     uint256 scaledAmount = _getScaledAmount(rebasedAmount, index);
     uint256 startingRebasedBalance = _getRebasedAmount(scaledBalance, index);
     uint256 endingRebasedBalance = _getRebasedAmount(scaledBalance + scaledAmount, index);

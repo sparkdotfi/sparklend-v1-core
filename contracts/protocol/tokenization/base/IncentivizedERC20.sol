@@ -100,16 +100,6 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
     return _decimals;
   }
 
-  /// @inheritdoc IERC20
-  function totalSupply() public view virtual override returns (uint256) {
-    return _totalSupply;
-  }
-
-  /// @inheritdoc IERC20
-  function balanceOf(address account) public view virtual override returns (uint256) {
-    return _userState[account].balance;
-  }
-
   /**
    * @notice Returns the address of the Incentives Controller contract
    * @return The address of the Incentives Controller
@@ -163,6 +153,14 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
   ) external virtual returns (bool) {
     _approve(_msgSender(), spender, _allowances[_msgSender()][spender] - subtractedValue);
     return true;
+  }
+
+  function _scaledBalanceOf(address account) internal view returns (uint256) {
+    return _userState[account].balance;
+  }
+
+  function _scaledTotalSupply() internal view returns (uint256) {
+    return _totalSupply;
   }
 
   /**
