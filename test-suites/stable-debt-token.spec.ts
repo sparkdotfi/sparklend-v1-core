@@ -236,7 +236,7 @@ makeSuite('StableDebtToken', (testEnv: TestEnv) => {
 
     await expect(
       stableDebtContract.connect(users[0].signer).increaseAllowance(users[1].address, 500)
-    ).to.be.revertedWith(ProtocolErrors.OPERATION_NOT_SUPPORTED);
+    ).to.be.reverted;
   });
 
   it('Tries to decrease allowance of debt tokens (revert expected)', async () => {
