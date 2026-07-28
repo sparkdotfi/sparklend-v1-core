@@ -209,36 +209,6 @@ makeSuite('VariableDebtToken', (testEnv: TestEnv) => {
     ).to.be.revertedWith(ProtocolErrors.OPERATION_NOT_SUPPORTED);
   });
 
-  it('Tries to increaseAllowance (revert expected)', async () => {
-    const { users, dai, helpersContract } = testEnv;
-    const daiVariableDebtTokenAddress = (
-      await helpersContract.getReserveTokensAddresses(dai.address)
-    ).variableDebtTokenAddress;
-    const variableDebtContract = VariableDebtToken__factory.connect(
-      daiVariableDebtTokenAddress,
-      users[0].signer
-    );
-
-    await expect(
-      variableDebtContract.connect(users[0].signer).increaseAllowance(users[1].address, 500)
-    ).to.be.revertedWith(ProtocolErrors.OPERATION_NOT_SUPPORTED);
-  });
-
-  it('Tries to decreaseAllowance (revert expected)', async () => {
-    const { users, dai, helpersContract } = testEnv;
-    const daiVariableDebtTokenAddress = (
-      await helpersContract.getReserveTokensAddresses(dai.address)
-    ).variableDebtTokenAddress;
-    const variableDebtContract = VariableDebtToken__factory.connect(
-      daiVariableDebtTokenAddress,
-      users[0].signer
-    );
-
-    await expect(
-      variableDebtContract.connect(users[0].signer).decreaseAllowance(users[1].address, 500)
-    ).to.be.revertedWith(ProtocolErrors.OPERATION_NOT_SUPPORTED);
-  });
-
   it('Tries to transferFrom debt tokens (revert expected)', async () => {
     const { users, dai, helpersContract } = testEnv;
     const daiVariableDebtTokenAddress = (

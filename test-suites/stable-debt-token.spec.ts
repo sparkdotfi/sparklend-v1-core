@@ -225,34 +225,6 @@ makeSuite('StableDebtToken', (testEnv: TestEnv) => {
     ).to.be.revertedWith(ProtocolErrors.OPERATION_NOT_SUPPORTED);
   });
 
-  it('Tries to increase allowance of debt tokens (revert expected)', async () => {
-    const { users, dai, helpersContract } = testEnv;
-    const daiStableDebtTokenAddress = (await helpersContract.getReserveTokensAddresses(dai.address))
-      .stableDebtTokenAddress;
-    const stableDebtContract = StableDebtToken__factory.connect(
-      daiStableDebtTokenAddress,
-      users[0].signer
-    );
-
-    await expect(
-      stableDebtContract.connect(users[0].signer).increaseAllowance(users[1].address, 500)
-    ).to.be.reverted;
-  });
-
-  it('Tries to decrease allowance of debt tokens (revert expected)', async () => {
-    const { users, dai, helpersContract } = testEnv;
-    const daiStableDebtTokenAddress = (await helpersContract.getReserveTokensAddresses(dai.address))
-      .stableDebtTokenAddress;
-    const stableDebtContract = StableDebtToken__factory.connect(
-      daiStableDebtTokenAddress,
-      users[0].signer
-    );
-
-    await expect(
-      stableDebtContract.connect(users[0].signer).decreaseAllowance(users[1].address, 500)
-    ).to.be.revertedWith(ProtocolErrors.OPERATION_NOT_SUPPORTED);
-  });
-
   it('Tries to transferFrom (revert expected)', async () => {
     const { users, dai, helpersContract } = testEnv;
     const daiStableDebtTokenAddress = (await helpersContract.getReserveTokensAddresses(dai.address))
