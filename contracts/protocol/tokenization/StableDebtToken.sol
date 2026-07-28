@@ -98,8 +98,8 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
   }
 
   /// @inheritdoc IERC20
-  function balanceOf(address account) public view virtual override returns (uint256) {
-    uint256 accountBalance = super.balanceOf(account);
+  function balanceOf(address account) public view returns (uint256) {
+    uint256 accountBalance = principalBalanceOf(account);
     uint256 stableRate = _userState[account].additionalData;
     if (accountBalance == 0) {
       return 0;
@@ -254,7 +254,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
   function _calculateBalanceIncrease(
     address user
   ) internal view returns (uint256, uint256, uint256) {
-    uint256 previousPrincipalBalance = super.balanceOf(user);
+    uint256 previousPrincipalBalance = principalBalanceOf(user);
 
     if (previousPrincipalBalance == 0) {
       return (0, 0, 0);
@@ -272,7 +272,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
   /// @inheritdoc IStableDebtToken
   function getSupplyData() external view override returns (uint256, uint256, uint256, uint40) {
     uint256 avgRate = _avgStableRate;
-    return (super.totalSupply(), _calcTotalSupply(avgRate), avgRate, _totalSupplyTimestamp);
+    return (_totalSupply, _calcTotalSupply(avgRate), avgRate, _totalSupplyTimestamp);
   }
 
   /// @inheritdoc IStableDebtToken
@@ -282,7 +282,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
   }
 
   /// @inheritdoc IERC20
-  function totalSupply() public view virtual override returns (uint256) {
+  function totalSupply() public view virtual returns (uint256) {
     return _calcTotalSupply(_avgStableRate);
   }
 
@@ -292,8 +292,8 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
   }
 
   /// @inheritdoc IStableDebtToken
-  function principalBalanceOf(address user) external view virtual override returns (uint256) {
-    return super.balanceOf(user);
+  function principalBalanceOf(address user) public view virtual override returns (uint256) {
+    return _userState[user].balance;
   }
 
   /// @inheritdoc IStableDebtToken
@@ -307,7 +307,7 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
    * @return The debt balance of the user since the last burn/mint action
    */
   function _calcTotalSupply(uint256 avgRate) internal view returns (uint256) {
-    uint256 principalSupply = super.totalSupply();
+    uint256 principalSupply = _totalSupply;
 
     if (principalSupply == 0) {
       return 0;
@@ -366,23 +366,37 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function allowance(address, address) external view virtual override returns (uint256) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function approve(address, uint256) external virtual override returns (bool) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function transferFrom(address, address, uint256) external virtual override returns (bool) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
-  function increaseAllowance(address, uint256) external virtual override returns (bool) {
-    revert(Errors.OPERATION_NOT_SUPPORTED);
-  }
+  /**
+   * @notice Decreases the borrow allowance of a user on the specific debt token.
+   * @param delegator The address delegating the borrowing power
+   * @param delegatee The address receiving the delegated borrowing power
+   * @param amount The minimum amount to subtract from the current allowance
+   */
+  function _decreaseBorrowAllowance(address delegator, address delegatee, uint256 amount) internal {
+    uint256 currentAllowance = _borrowAllowances[delegator][delegatee];
+    if (currentAllowance < amount) {
+      revert InsufficientBorrowAllowance(delegatee, currentAllowance, amount);
+    }
 
-  function decreaseAllowance(address, uint256) external virtual override returns (bool) {
-    revert(Errors.OPERATION_NOT_SUPPORTED);
+    uint256 newAllowance = currentAllowance - amount;
+
+    _borrowAllowances[delegator][delegatee] = newAllowance;
+
+    emit BorrowAllowanceDelegated(delegator, delegatee, _underlyingAsset, newAllowance);
   }
 }

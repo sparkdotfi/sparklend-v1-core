@@ -12,7 +12,6 @@ import {IAToken} from '../../interfaces/IAToken.sol';
 import {IAaveIncentivesController} from '../../interfaces/IAaveIncentivesController.sol';
 import {IInitializableAToken} from '../../interfaces/IInitializableAToken.sol';
 import {ScaledBalanceTokenBase} from './base/ScaledBalanceTokenBase.sol';
-import {IncentivizedERC20} from './base/IncentivizedERC20.sol';
 import {EIP712Base} from './base/EIP712Base.sol';
 
 /**
@@ -25,10 +24,18 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
   using SafeCast for uint256;
   using GPv2SafeERC20 for IERC20;
 
+  /**
+   * @dev   Indicates a failure with the `spender`'s allowance. Used in transfers.
+   * @param spender   Address that may be allowed to operate on tokens without being their owner
+   * @param allowance Amount of tokens a `spender` is allowed to operate with
+   * @param needed    Minimum amount required to perform a transfer
+   */
+  error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
+
   bytes32 public constant PERMIT_TYPEHASH =
     keccak256('Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)');
 
-  uint256 public constant ATOKEN_REVISION = 0x1;
+  uint256 public constant ATOKEN_REVISION = 0x2;
 
   address internal _treasury;
   address internal _underlyingAsset;
@@ -89,7 +96,7 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     uint256 amount,
     uint256 index
   ) external virtual override onlyPool returns (bool) {
-    return _mintScaled(caller, onBehalfOf, amount, index);
+    return _mintScaled(caller, onBehalfOf, amount, index, RoundingMode.ROUND_DOWN);
   }
 
   /// @inheritdoc IAToken
@@ -99,7 +106,7 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     uint256 amount,
     uint256 index
   ) external virtual override onlyPool {
-    _burnScaled(from, receiverOfUnderlying, amount, index);
+    _burnScaled(from, receiverOfUnderlying, amount, index, RoundingMode.ROUND_UP);
     if (receiverOfUnderlying != address(this)) {
       IERC20(_underlyingAsset).safeTransfer(receiverOfUnderlying, amount);
     }
@@ -110,7 +117,7 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     if (amount == 0) {
       return;
     }
-    _mintScaled(address(POOL), _treasury, amount, index);
+    _mintScaled(address(POOL), _treasury, amount, index, RoundingMode.ROUND_DOWN);
   }
 
   /// @inheritdoc IAToken
@@ -125,21 +132,21 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
   }
 
   /// @inheritdoc IERC20
-  function balanceOf(
-    address user
-  ) public view virtual override(IncentivizedERC20, IERC20) returns (uint256) {
-    return super.balanceOf(user).rayMul(POOL.getReserveNormalizedIncome(_underlyingAsset));
+  function balanceOf(address user) public view returns (uint256) {
+    return
+      _getRebasedAmount(scaledBalanceOf(user), POOL.getReserveNormalizedIncome(_underlyingAsset));
   }
 
   /// @inheritdoc IERC20
-  function totalSupply() public view virtual override(IncentivizedERC20, IERC20) returns (uint256) {
-    uint256 currentSupplyScaled = super.totalSupply();
+  function totalSupply() public view returns (uint256) {
+    uint256 currentSupplyScaled = scaledTotalSupply();
 
     if (currentSupplyScaled == 0) {
       return 0;
     }
 
-    return currentSupplyScaled.rayMul(POOL.getReserveNormalizedIncome(_underlyingAsset));
+    return
+      _getRebasedAmount(currentSupplyScaled, POOL.getReserveNormalizedIncome(_underlyingAsset));
   }
 
   /// @inheritdoc IAToken
@@ -192,39 +199,133 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     _approve(owner, spender, value);
   }
 
+  /// @inheritdoc IERC20
+  function transfer(address recipient, uint256 amount) external virtual override returns (bool) {
+    _transfer(_msgSender(), recipient, amount.toUint128(), true);
+    return true;
+  }
+
+  /// @inheritdoc IERC20
+  function transferFrom(
+    address sender,
+    address recipient,
+    uint256 amount
+  ) external virtual returns (bool) {
+    _spendAllowance(sender, _msgSender(), amount);
+
+    _transfer(sender, recipient, amount.toUint128(), true);
+
+    return true;
+  }
+
   /**
    * @notice Transfers the aTokens between two users. Validates the transfer
    * (ie checks for valid HF after the transfer) if required
    * @param from The source address
    * @param to The destination address
-   * @param amount The amount getting transferred
+   * @param rebasedAmount The amount getting transferred
    * @param validate True if the transfer needs to be validated, false otherwise
    */
-  function _transfer(address from, address to, uint256 amount, bool validate) internal virtual {
+  function _transfer(
+    address from,
+    address to,
+    uint256 rebasedAmount,
+    bool validate
+  ) internal virtual {
     address underlyingAsset = _underlyingAsset;
 
     uint256 index = POOL.getReserveNormalizedIncome(underlyingAsset);
 
-    uint256 fromBalanceBefore = super.balanceOf(from).rayMul(index);
-    uint256 toBalanceBefore = super.balanceOf(to).rayMul(index);
+    uint256 senderStartingRebasedBalance = _getRebasedAmount(scaledBalanceOf(from), index);
+    uint256 recipientStartingRebasedBalance = _getRebasedAmount(scaledBalanceOf(to), index);
 
-    super._transfer(from, to, amount, index);
+    _transferScaled(from, to, rebasedAmount, index);
 
     if (validate) {
-      POOL.finalizeTransfer(underlyingAsset, from, to, amount, fromBalanceBefore, toBalanceBefore);
+      POOL.finalizeTransfer(
+        underlyingAsset,
+        from,
+        to,
+        rebasedAmount,
+        senderStartingRebasedBalance,
+        recipientStartingRebasedBalance
+      );
     }
 
-    emit BalanceTransfer(from, to, amount.rayDiv(index), index);
+    emit BalanceTransfer(from, to, _getScaledAmount(rebasedAmount, index), index);
   }
 
   /**
-   * @notice Overrides the parent _transfer to force validated transfer() and transferFrom()
-   * @param from The source address
-   * @param to The destination address
-   * @param amount The amount getting transferred
+   * @notice Updates `owner`'s allowance for `spender` based on `correctedAmount` spent
+   * @param owner The owner of the tokens
+   * @param spender The user allowed to spend on behalf of the owner
+   * @param rebasedAmount The nominal amount being transferred
    */
-  function _transfer(address from, address to, uint128 amount) internal virtual override {
-    _transfer(from, to, amount, true);
+  function _spendAllowance(address owner, address spender, uint256 rebasedAmount) internal virtual {
+    uint256 currentAllowance = _allowances[owner][spender];
+    if (currentAllowance < rebasedAmount) {
+      revert ERC20InsufficientAllowance(spender, currentAllowance, rebasedAmount);
+    }
+
+    uint256 index = POOL.getReserveNormalizedIncome(_underlyingAsset);
+    uint256 scaledBalance = scaledBalanceOf(owner);
+    uint256 scaledAmount = _getScaledAmount(rebasedAmount, index);
+    uint256 startingRebasedBalance = _getRebasedAmount(scaledBalance, index);
+    uint256 endingRebasedBalance = _getRebasedAmount(scaledBalance - scaledAmount, index);
+
+    // Consume allowance based on the owner's actual balance decrease rather than `rebasedAmount`
+    // (inspired by Aave v3.5). Because the scaled amount is rounded up, the owner's balance can
+    // drop by slightly more than `rebasedAmount`, so we measure the real decrease from the
+    // resulting scaled balance to keep the invariant: allowance consumed == balance transferred.
+    // The consumption is capped at the current allowance.
+    uint256 rebasedBalanceDecrease = startingRebasedBalance - endingRebasedBalance;
+
+    uint256 consumption = currentAllowance >= rebasedBalanceDecrease
+      ? rebasedBalanceDecrease
+      : currentAllowance;
+    _approve(owner, spender, currentAllowance - consumption);
+  }
+
+  /// @inheritdoc IERC20
+  function approve(address spender, uint256 amount) external virtual override returns (bool) {
+    _approve(_msgSender(), spender, amount);
+    return true;
+  }
+
+  /**
+   * @notice Increases the allowance of spender to spend _msgSender() tokens
+   * @param spender The user allowed to spend on behalf of _msgSender()
+   * @param addedValue The amount being added to the allowance
+   * @return `true`
+   */
+  function increaseAllowance(address spender, uint256 addedValue) external virtual returns (bool) {
+    _approve(_msgSender(), spender, _allowances[_msgSender()][spender] + addedValue);
+    return true;
+  }
+
+  /**
+   * @notice Decreases the allowance of spender to spend _msgSender() tokens
+   * @param spender The user allowed to spend on behalf of _msgSender()
+   * @param subtractedValue The amount being subtracted to the allowance
+   * @return `true`
+   */
+  function decreaseAllowance(
+    address spender,
+    uint256 subtractedValue
+  ) external virtual returns (bool) {
+    _approve(_msgSender(), spender, _allowances[_msgSender()][spender] - subtractedValue);
+    return true;
+  }
+
+  /**
+   * @notice Approve `spender` to use `rebasedAmount` of `owner`s balance
+   * @param owner The address owning the tokens
+   * @param spender The address approved for spending
+   * @param rebasedAmount The amount of tokens to approve spending of
+   */
+  function _approve(address owner, address spender, uint256 rebasedAmount) internal virtual {
+    _allowances[owner][spender] = rebasedAmount;
+    emit Approval(owner, spender, rebasedAmount);
   }
 
   /**
@@ -248,9 +349,25 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     return name();
   }
 
+  /// @inheritdoc IERC20
+  function allowance(
+    address owner,
+    address spender
+  ) external view virtual override returns (uint256) {
+    return _allowances[owner][spender];
+  }
+
   /// @inheritdoc IAToken
   function rescueTokens(address token, address to, uint256 amount) external override onlyPoolAdmin {
     require(token != _underlyingAsset, Errors.UNDERLYING_CANNOT_BE_RESCUED);
     IERC20(token).safeTransfer(to, amount);
+  }
+
+  function _getScaledAmount(uint256 rebasedAmount, uint256 index) internal pure returns (uint256) {
+    return _getScaledAmount(rebasedAmount, index, RoundingMode.ROUND_UP);
+  }
+
+  function _getRebasedAmount(uint256 scaledAmount, uint256 index) internal pure returns (uint256) {
+    return scaledAmount.rayMulFloor(index);
   }
 }

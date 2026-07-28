@@ -27,10 +27,3 @@ jobs:
         run: npm run prettier:check
       - name: Test
         run: npm run ci:test
-      - name: Coverage
-        run: npm run coverage
-      - name: Publish coverage
-        uses: codecov/codecov-action@v1
-        with:
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}

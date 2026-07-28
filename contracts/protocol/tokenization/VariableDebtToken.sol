@@ -25,7 +25,7 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
   using WadRayMath for uint256;
   using SafeCast for uint256;
 
-  uint256 public constant DEBT_TOKEN_REVISION = 0x1;
+  uint256 public constant DEBT_TOKEN_REVISION = 0x2;
 
   /**
    * @dev Constructor.
@@ -77,14 +77,15 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
   }
 
   /// @inheritdoc IERC20
-  function balanceOf(address user) public view virtual override returns (uint256) {
-    uint256 scaledBalance = super.balanceOf(user);
+  function balanceOf(address user) public view returns (uint256) {
+    uint256 scaledBalance = scaledBalanceOf(user);
 
     if (scaledBalance == 0) {
       return 0;
     }
 
-    return scaledBalance.rayMul(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
+    return
+      _getRebasedAmount(scaledBalance, POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
   }
 
   /// @inheritdoc IVariableDebtToken
@@ -95,9 +96,12 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     uint256 index
   ) external virtual override onlyPool returns (bool, uint256) {
     if (user != onBehalfOf) {
-      _decreaseBorrowAllowance(onBehalfOf, user, amount);
+      _decreaseBorrowAllowance(onBehalfOf, user, amount, index);
     }
-    return (_mintScaled(user, onBehalfOf, amount, index), scaledTotalSupply());
+    return (
+      _mintScaled(user, onBehalfOf, amount, index, RoundingMode.ROUND_UP),
+      scaledTotalSupply()
+    );
   }
 
   /// @inheritdoc IVariableDebtToken
@@ -106,13 +110,17 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     uint256 amount,
     uint256 index
   ) external virtual override onlyPool returns (uint256) {
-    _burnScaled(from, address(0), amount, index);
+    _burnScaled(from, address(0), amount, index, RoundingMode.ROUND_DOWN);
     return scaledTotalSupply();
   }
 
   /// @inheritdoc IERC20
-  function totalSupply() public view virtual override returns (uint256) {
-    return super.totalSupply().rayMul(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
+  function totalSupply() public view virtual returns (uint256) {
+    return
+      _getRebasedAmount(
+        scaledTotalSupply(),
+        POOL.getReserveNormalizedVariableDebt(_underlyingAsset)
+      );
   }
 
   /// @inheritdoc EIP712Base
@@ -128,28 +136,71 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function allowance(address, address) external view virtual override returns (uint256) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function approve(address, uint256) external virtual override returns (bool) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function transferFrom(address, address, uint256) external virtual override returns (bool) {
-    revert(Errors.OPERATION_NOT_SUPPORTED);
-  }
-
-  function increaseAllowance(address, uint256) external virtual override returns (bool) {
-    revert(Errors.OPERATION_NOT_SUPPORTED);
-  }
-
-  function decreaseAllowance(address, uint256) external virtual override returns (bool) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
   /// @inheritdoc IVariableDebtToken
   function UNDERLYING_ASSET_ADDRESS() external view override returns (address) {
     return _underlyingAsset;
+  }
+
+  function _getRebasedAmount(uint256 scaledAmount, uint256 index) internal pure returns (uint256) {
+    return scaledAmount.rayMulCeil(index);
+  }
+
+  function _getScaledAmount(uint256 rebasedAmount, uint256 index) internal pure returns (uint256) {
+    return _getScaledAmount(rebasedAmount, index, RoundingMode.ROUND_UP);
+  }
+
+  /**
+   * @notice Decreases the borrow allowance of a user on the specific debt token.
+   * @param delegator The address delegating the borrowing power
+   * @param delegatee The address receiving the delegated borrowing power
+   * @param rebasedAmount The minimum amount to subtract from the current allowance
+   * @param index The variable debt index of the reserve
+   */
+  function _decreaseBorrowAllowance(
+    address delegator,
+    address delegatee,
+    uint256 rebasedAmount,
+    uint256 index
+  ) internal {
+    uint256 currentAllowance = _borrowAllowances[delegator][delegatee];
+    if (currentAllowance < rebasedAmount) {
+      revert InsufficientBorrowAllowance(delegatee, currentAllowance, rebasedAmount);
+    }
+
+    uint256 scaledBalance = scaledBalanceOf(delegator);
+    uint256 scaledAmount = _getScaledAmount(rebasedAmount, index);
+    uint256 startingRebasedBalance = _getRebasedAmount(scaledBalance, index);
+    uint256 endingRebasedBalance = _getRebasedAmount(scaledBalance + scaledAmount, index);
+
+    // Consume allowance based on the owner's actual balance increase rather than `rebasedAmount`
+    // (inspired by Aave v3.5). Because the scaled amount is rounded up, the owner's balance can
+    // increase by slightly more than `rebasedAmount`, so we measure the real increase from the
+    // resulting scaled balance to keep the invariant: allowance consumed == balance minted.
+    // The consumption is capped at the current allowance.
+    uint256 rebasedBalanceIncrease = endingRebasedBalance - startingRebasedBalance;
+
+    uint256 consumption = currentAllowance >= rebasedBalanceIncrease
+      ? rebasedBalanceIncrease
+      : currentAllowance;
+    uint256 newAllowance = currentAllowance - consumption;
+
+    _borrowAllowances[delegator][delegatee] = newAllowance;
+
+    emit BorrowAllowanceDelegated(delegator, delegatee, _underlyingAsset, newAllowance);
   }
 }

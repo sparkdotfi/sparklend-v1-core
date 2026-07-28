@@ -115,9 +115,9 @@ library SupplyLogic {
 
     reserve.updateState(reserveCache);
 
-    uint256 userBalance = IAToken(reserveCache.aTokenAddress).scaledBalanceOf(msg.sender).rayMul(
-      reserveCache.nextLiquidityIndex
-    );
+    uint256 userBalance = IAToken(reserveCache.aTokenAddress)
+      .scaledBalanceOf(msg.sender)
+      .rayMulFloor(reserveCache.nextLiquidityIndex);
 
     uint256 amountToWithdraw = params.amount;
 

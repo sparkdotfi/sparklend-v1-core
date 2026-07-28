@@ -18,6 +18,14 @@ abstract contract DebtTokenBase is
   Context,
   ICreditDelegationToken
 {
+  /**
+   * @dev   Indicates a failure with the `spender`'s allowance. Used in borrows.
+   * @param delegatee Address that may be allowed to borrow on behalf of an account
+   * @param allowance Amount of tokens a `spender` is allowed to borrow
+   * @param needed    Minimum amount required to perform a borrow
+   */
+  error InsufficientBorrowAllowance(address delegatee, uint256 allowance, uint256 needed);
+
   // Map of borrow allowances (delegator => delegatee => borrowAllowanceAmount)
   mapping(address => mapping(address => uint256)) internal _borrowAllowances;
 
@@ -84,19 +92,5 @@ abstract contract DebtTokenBase is
   function _approveDelegation(address delegator, address delegatee, uint256 amount) internal {
     _borrowAllowances[delegator][delegatee] = amount;
     emit BorrowAllowanceDelegated(delegator, delegatee, _underlyingAsset, amount);
-  }
-
-  /**
-   * @notice Decreases the borrow allowance of a user on the specific debt token.
-   * @param delegator The address delegating the borrowing power
-   * @param delegatee The address receiving the delegated borrowing power
-   * @param amount The amount to subtract from the current allowance
-   */
-  function _decreaseBorrowAllowance(address delegator, address delegatee, uint256 amount) internal {
-    uint256 newAllowance = _borrowAllowances[delegator][delegatee] - amount;
-
-    _borrowAllowances[delegator][delegatee] = newAllowance;
-
-    emit BorrowAllowanceDelegated(delegator, delegatee, _underlyingAsset, newAllowance);
   }
 }

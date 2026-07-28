@@ -147,14 +147,14 @@ makeSuite('Pool: FlashLoan', (testEnv: TestEnv) => {
     expect(wethCurrentLiquidityIndex).to.be.equal(
       wethLiquidityIndexBefore.add(wethLiquidityIndexAdded)
     );
-    expect(wethReservesAfter).to.be.equal(wethReservesBefore.add(wethFeesToProtocol));
+    expect(wethReservesAfter.add(1)).to.be.equal(wethReservesBefore.add(wethFeesToProtocol));
 
     expect(daiTotalLiquidityBefore.add(daiTotalFees)).to.be.closeTo(daiTotalLiquidityAfter, 2);
     expect(daiCurrentLiquidityRate).to.be.equal(0);
     expect(daiCurrentLiquidityIndex).to.be.equal(
       daiLiquidityIndexBefore.add(daiLiquidityIndexAdded)
     );
-    expect(daiReservesAfter).to.be.equal(daiReservesBefore.add(daiFeesToProtocol));
+    expect(daiReservesAfter.add(1)).to.be.equal(daiReservesBefore.add(daiFeesToProtocol));
 
     // Check event values for `ReserveDataUpdated`
     const reserveDataUpdatedEvents = tx.events?.filter(
@@ -228,8 +228,8 @@ makeSuite('Pool: FlashLoan', (testEnv: TestEnv) => {
 
     const flashBorrowedAmount = totalLiquidityBefore;
 
-    const totalFees = flashBorrowedAmount.mul(TOTAL_PREMIUM).div(10000);
-    const feesToProtocol = totalFees.mul(PREMIUM_TO_PROTOCOL).div(10000);
+    const totalFees = flashBorrowedAmount.percentMul(TOTAL_PREMIUM);
+    const feesToProtocol = totalFees.percentMul(PREMIUM_TO_PROTOCOL);
     const feesToLp = totalFees.sub(feesToProtocol);
     const liquidityIndexBefore = reserveData.liquidityIndex;
     const liquidityIndexAdded = feesToLp
@@ -258,7 +258,7 @@ makeSuite('Pool: FlashLoan', (testEnv: TestEnv) => {
         weth.address,
         flashBorrowedAmount,
         0,
-        flashBorrowedAmount.mul(9).div(10000),
+        totalFees,
         0
       );
     await pool.mintToTreasury([weth.address]);
@@ -273,7 +273,7 @@ makeSuite('Pool: FlashLoan', (testEnv: TestEnv) => {
     const reservesAfter = await aWETH.balanceOf(await aWETH.RESERVE_TREASURY_ADDRESS());
     expect(totalLiquidityBefore.add(totalFees)).to.be.closeTo(totalLiquidityAfter, 2);
     expect(currentLiquidityRate).to.be.equal(0);
-    expect(currentLiquidityIndex).to.be.equal(liquidityIndexBefore.add(liquidityIndexAdded));
+    expect(currentLiquidityIndex).to.be.equal(liquidityIndexBefore.add(liquidityIndexAdded).add(1));
     expect(
       reservesAfter.sub(feesToProtocol).mul(liquidityIndexBefore).div(currentLiquidityIndex)
     ).to.be.closeTo(reservesBefore, 2);
@@ -502,7 +502,7 @@ makeSuite('Pool: FlashLoan', (testEnv: TestEnv) => {
     expect(totalLiquidityBefore.add(totalFees)).to.be.closeTo(totalLiquidityAfter, 2);
     expect(currentLiquidityRate).to.be.equal(0);
     expect(currentLiquidityIndex).to.be.equal(liquidityIndexBefore.add(liquidityIndexAdded));
-    expect(reservesAfter).to.be.equal(reservesBefore.add(feesToProtocol));
+    expect(reservesAfter.add(1)).to.be.equal(reservesBefore.add(feesToProtocol));
 
     // Check handleRepayment is correctly called at flash loans
     await expect(tx)

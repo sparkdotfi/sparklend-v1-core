@@ -208,9 +208,8 @@ makeSuite('AToken: Events', (testEnv: TestEnv) => {
     updateBalances(balances, aDai, rcpt);
     const bobBalanceAfter = await aDai.balanceOf(bob.address);
 
-    expect(aliceBalanceAfter).to.be.closeTo(
-      aliceBalanceBefore.add(balances.balance[alice.address]),
-      2
+    expect(aliceBalanceAfter).to.be.equal(
+      aliceBalanceBefore.add(balances.balance[alice.address]).sub(indexChange ? 3 : 0)
     );
     expect(bobBalanceAfter).to.be.closeTo(bobBalanceBefore.add(balances.balance[bob.address]), 2);
   };

@@ -59,6 +59,34 @@ makeSuite('WadRayMath', () => {
     await expect(wrapper.rayMul(tooLargeA, b)).to.be.reverted;
   });
 
+  it('rayMulFloor()', async () => {
+    const a = BigNumber.from(RAY).add(1);
+    const b = BigNumber.from(RAY).add(1);
+    const product = a.mul(b);
+
+    expect(await wrapper.rayMulFloor(a, b)).to.be.eq(product.div(RAY));
+    expect(await wrapper.rayMulFloor(0, b)).to.be.eq(0);
+    expect(await wrapper.rayMulFloor(a, 0)).to.be.eq(0);
+
+    const tooLargeA = BigNumber.from(MAX_UINT_AMOUNT).div(b).add(1);
+    await expect(wrapper.rayMulFloor(tooLargeA, b)).to.be.reverted;
+  });
+
+  it('rayMulCeil()', async () => {
+    const a = BigNumber.from(RAY).add(1);
+    const b = BigNumber.from(RAY).add(1);
+    const product = a.mul(b);
+    const expected = product.div(RAY).add(product.mod(RAY).isZero() ? 0 : 1);
+
+    expect(await wrapper.rayMulCeil(a, b)).to.be.eq(expected);
+    expect(await wrapper.rayMulCeil(RAY, RAY)).to.be.eq(RAY);
+    expect(await wrapper.rayMulCeil(0, b)).to.be.eq(0);
+    expect(await wrapper.rayMulCeil(a, 0)).to.be.eq(0);
+
+    const tooLargeA = BigNumber.from(MAX_UINT_AMOUNT).div(b).add(1);
+    await expect(wrapper.rayMulCeil(tooLargeA, b)).to.be.reverted;
+  });
+
   it('rayDiv()', async () => {
     const a = BigNumber.from('134534543232342353231234');
     const b = BigNumber.from('13265462389132757665657');
@@ -70,6 +98,34 @@ makeSuite('WadRayMath', () => {
 
     await expect(wrapper.rayDiv(tooLargeA, b)).to.be.reverted;
     await expect(wrapper.rayDiv(a, 0)).to.be.reverted;
+  });
+
+  it('rayDivFloor()', async () => {
+    const a = BigNumber.from(RAY).add(1);
+    const b = BigNumber.from(3);
+    const scaled = a.mul(RAY);
+
+    expect(await wrapper.rayDivFloor(a, b)).to.be.eq(scaled.div(b));
+    expect(await wrapper.rayDivFloor(0, b)).to.be.eq(0);
+
+    const tooLargeA = BigNumber.from(MAX_UINT_AMOUNT).div(RAY).add(1);
+    await expect(wrapper.rayDivFloor(tooLargeA, b)).to.be.reverted;
+    await expect(wrapper.rayDivFloor(a, 0)).to.be.reverted;
+  });
+
+  it('rayDivCeil()', async () => {
+    const a = BigNumber.from(RAY).add(1);
+    const b = BigNumber.from(3);
+    const scaled = a.mul(RAY);
+    const expected = scaled.div(b).add(scaled.mod(b).isZero() ? 0 : 1);
+
+    expect(await wrapper.rayDivCeil(a, b)).to.be.eq(expected);
+    expect(await wrapper.rayDivCeil(RAY, RAY)).to.be.eq(RAY);
+    expect(await wrapper.rayDivCeil(0, b)).to.be.eq(0);
+
+    const tooLargeA = BigNumber.from(MAX_UINT_AMOUNT).div(RAY).add(1);
+    await expect(wrapper.rayDivCeil(tooLargeA, b)).to.be.reverted;
+    await expect(wrapper.rayDivCeil(a, 0)).to.be.reverted;
   });
 
   it('rayToWad()', async () => {

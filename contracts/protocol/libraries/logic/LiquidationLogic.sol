@@ -166,16 +166,6 @@ library LiquidationLogic {
       userConfig.setBorrowing(debtReserve.id, false);
     }
 
-    // If the collateral being liquidated is equal to the user balance,
-    // we set the currency as not being used as collateral anymore
-    if (
-      vars.actualCollateralToLiquidate + vars.liquidationProtocolFeeAmount ==
-      vars.userCollateralBalance
-    ) {
-      userConfig.setUsingAsCollateral(collateralReserve.id, false);
-      emit ReserveUsedAsCollateralDisabled(params.collateralAsset, params.user);
-    }
-
     _burnDebtTokens(params, vars);
 
     debtReserve.updateInterestRates(
@@ -193,6 +183,16 @@ library LiquidationLogic {
       vars.actualDebtToLiquidate
     );
 
+    // If the collateral being liquidated is equal to the user balance,
+    // we set the currency as not being used as collateral anymore
+    if (
+      vars.actualCollateralToLiquidate + vars.liquidationProtocolFeeAmount ==
+      vars.userCollateralBalance
+    ) {
+      userConfig.setUsingAsCollateral(collateralReserve.id, false);
+      emit ReserveUsedAsCollateralDisabled(params.collateralAsset, params.user);
+    }
+
     if (params.receiveAToken) {
       _liquidateATokens(reservesData, reservesList, usersConfig, collateralReserve, params, vars);
     } else {
@@ -202,13 +202,13 @@ library LiquidationLogic {
     // Transfer fee to treasury if it is non-zero
     if (vars.liquidationProtocolFeeAmount != 0) {
       uint256 liquidityIndex = collateralReserve.getNormalizedIncome();
-      uint256 scaledDownLiquidationProtocolFee = vars.liquidationProtocolFeeAmount.rayDiv(
+      uint256 scaledDownLiquidationProtocolFee = vars.liquidationProtocolFeeAmount.rayDivCeil(
         liquidityIndex
       );
       uint256 scaledDownUserBalance = vars.collateralAToken.scaledBalanceOf(params.user);
       // To avoid trying to send more aTokens than available on balance, due to 1 wei imprecision
       if (scaledDownLiquidationProtocolFee > scaledDownUserBalance) {
-        vars.liquidationProtocolFeeAmount = scaledDownUserBalance.rayMul(liquidityIndex);
+        vars.liquidationProtocolFeeAmount = scaledDownUserBalance.rayMulFloor(liquidityIndex);
       }
       vars.collateralAToken.transferOnLiquidation(
         params.user,
