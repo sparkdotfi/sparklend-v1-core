@@ -42,7 +42,7 @@ abstract contract ScaledBalanceTokenBase is IncentivizedERC20, IScaledBalanceTok
   }
 
   /// @inheritdoc IScaledBalanceToken
-  function scaledBalanceOf(address user) external view override returns (uint256) {
+  function scaledBalanceOf(address user) public view override returns (uint256) {
     return _userState[user].balance;
   }
 
