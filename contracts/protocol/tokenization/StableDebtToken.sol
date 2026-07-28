@@ -366,14 +366,17 @@ contract StableDebtToken is DebtTokenBase, IncentivizedERC20, IStableDebtToken {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function allowance(address, address) external view virtual override returns (uint256) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function approve(address, uint256) external virtual override returns (bool) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function transferFrom(address, address, uint256) external virtual override returns (bool) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
