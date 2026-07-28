@@ -78,7 +78,7 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
 
   /// @inheritdoc IERC20
   function balanceOf(address user) public view returns (uint256) {
-    uint256 scaledBalance = _scaledBalanceOf(user);
+    uint256 scaledBalance = scaledBalanceOf(user);
 
     if (scaledBalance == 0) {
       return 0;
@@ -118,7 +118,7 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
   function totalSupply() public view virtual returns (uint256) {
     return
       _getRebasedAmount(
-        _scaledTotalSupply(),
+        scaledTotalSupply(),
         POOL.getReserveNormalizedVariableDebt(_underlyingAsset)
       );
   }
@@ -136,23 +136,18 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function allowance(address, address) external view virtual override returns (uint256) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function approve(address, uint256) external virtual override returns (bool) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
+  /// @inheritdoc IERC20
   function transferFrom(address, address, uint256) external virtual override returns (bool) {
-    revert(Errors.OPERATION_NOT_SUPPORTED);
-  }
-
-  function increaseAllowance(address, uint256) external virtual override returns (bool) {
-    revert(Errors.OPERATION_NOT_SUPPORTED);
-  }
-
-  function decreaseAllowance(address, uint256) external virtual override returns (bool) {
     revert(Errors.OPERATION_NOT_SUPPORTED);
   }
 
@@ -187,7 +182,7 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
       revert InsufficientBorrowAllowance(delegatee, currentAllowance, rebasedAmount);
     }
 
-    uint256 scaledBalance = _scaledBalanceOf(delegator);
+    uint256 scaledBalance = scaledBalanceOf(delegator);
     uint256 scaledAmount = _getScaledAmount(rebasedAmount, index);
     uint256 startingRebasedBalance = _getRebasedAmount(scaledBalance, index);
     uint256 endingRebasedBalance = _getRebasedAmount(scaledBalance + scaledAmount, index);

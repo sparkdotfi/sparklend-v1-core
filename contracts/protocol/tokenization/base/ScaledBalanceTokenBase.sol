@@ -5,7 +5,6 @@ import {SafeCast} from '../../../dependencies/openzeppelin/contracts/SafeCast.so
 import {Errors} from '../../libraries/helpers/Errors.sol';
 import {WadRayMath} from '../../libraries/math/WadRayMath.sol';
 
-import {IAaveIncentivesController} from '../../../interfaces/IAaveIncentivesController.sol';
 import {IPool} from '../../../interfaces/IPool.sol';
 import {IScaledBalanceToken} from '../../../interfaces/IScaledBalanceToken.sol';
 import {IncentivizedERC20} from './IncentivizedERC20.sol';
@@ -42,7 +41,7 @@ abstract contract ScaledBalanceTokenBase is IncentivizedERC20, IScaledBalanceTok
   }
 
   /// @inheritdoc IScaledBalanceToken
-  function scaledBalanceOf(address user) external view override returns (uint256) {
+  function scaledBalanceOf(address user) public view override returns (uint256) {
     return _userState[user].balance;
   }
 

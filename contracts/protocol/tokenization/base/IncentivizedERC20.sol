@@ -4,8 +4,6 @@ pragma solidity ^0.8.10;
 import {Context} from '../../../dependencies/openzeppelin/contracts/Context.sol';
 import {IERC20} from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
 import {IERC20Detailed} from '../../../dependencies/openzeppelin/contracts/IERC20Detailed.sol';
-import {SafeCast} from '../../../dependencies/openzeppelin/contracts/SafeCast.sol';
-import {WadRayMath} from '../../libraries/math/WadRayMath.sol';
 import {Errors} from '../../libraries/helpers/Errors.sol';
 import {IAaveIncentivesController} from '../../../interfaces/IAaveIncentivesController.sol';
 import {IPoolAddressesProvider} from '../../../interfaces/IPoolAddressesProvider.sol';
@@ -18,17 +16,6 @@ import {IACLManager} from '../../../interfaces/IACLManager.sol';
  * @notice Basic ERC20 implementation
  */
 abstract contract IncentivizedERC20 is Context, IERC20Detailed {
-  using WadRayMath for uint256;
-  using SafeCast for uint256;
-
-  /**
-   * @dev   Indicates a failure with the `spender`'s allowance. Used in transfers.
-   * @param spender   Address that may be allowed to operate on tokens without being their owner
-   * @param allowance Amount of tokens a `spender` is allowed to operate with
-   * @param needed    Minimum amount required to perform a transfer
-   */
-  error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
-
   /**
    * @dev Only pool admin can call functions marked by this modifier.
    */
@@ -114,64 +101,6 @@ abstract contract IncentivizedERC20 is Context, IERC20Detailed {
    */
   function setIncentivesController(IAaveIncentivesController controller) external onlyPoolAdmin {
     _incentivesController = controller;
-  }
-
-  /// @inheritdoc IERC20
-  function allowance(
-    address owner,
-    address spender
-  ) external view virtual override returns (uint256) {
-    return _allowances[owner][spender];
-  }
-
-  /// @inheritdoc IERC20
-  function approve(address spender, uint256 amount) external virtual override returns (bool) {
-    _approve(_msgSender(), spender, amount);
-    return true;
-  }
-
-  /**
-   * @notice Increases the allowance of spender to spend _msgSender() tokens
-   * @param spender The user allowed to spend on behalf of _msgSender()
-   * @param addedValue The amount being added to the allowance
-   * @return `true`
-   */
-  function increaseAllowance(address spender, uint256 addedValue) external virtual returns (bool) {
-    _approve(_msgSender(), spender, _allowances[_msgSender()][spender] + addedValue);
-    return true;
-  }
-
-  /**
-   * @notice Decreases the allowance of spender to spend _msgSender() tokens
-   * @param spender The user allowed to spend on behalf of _msgSender()
-   * @param subtractedValue The amount being subtracted to the allowance
-   * @return `true`
-   */
-  function decreaseAllowance(
-    address spender,
-    uint256 subtractedValue
-  ) external virtual returns (bool) {
-    _approve(_msgSender(), spender, _allowances[_msgSender()][spender] - subtractedValue);
-    return true;
-  }
-
-  function _scaledBalanceOf(address account) internal view returns (uint256) {
-    return _userState[account].balance;
-  }
-
-  function _scaledTotalSupply() internal view returns (uint256) {
-    return _totalSupply;
-  }
-
-  /**
-   * @notice Approve `spender` to use `rebasedAmount` of `owner`s balance
-   * @param owner The address owning the tokens
-   * @param spender The address approved for spending
-   * @param rebasedAmount The amount of tokens to approve spending of
-   */
-  function _approve(address owner, address spender, uint256 rebasedAmount) internal virtual {
-    _allowances[owner][spender] = rebasedAmount;
-    emit Approval(owner, spender, rebasedAmount);
   }
 
   /**
