@@ -368,6 +368,6 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
   }
 
   function _getRebasedAmount(uint256 scaledAmount, uint256 index) internal pure returns (uint256) {
-    return scaledAmount.rayMulFloor(index);
+    return _getRebasedAmount(scaledAmount, index, RoundingMode.ROUND_DOWN);
   }
 }
