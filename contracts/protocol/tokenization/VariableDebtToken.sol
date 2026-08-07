@@ -12,7 +12,7 @@ import {IInitializableDebtToken} from '../../interfaces/IInitializableDebtToken.
 import {IVariableDebtToken} from '../../interfaces/IVariableDebtToken.sol';
 import {EIP712Base} from './base/EIP712Base.sol';
 import {DebtTokenBase} from './base/DebtTokenBase.sol';
-import {MintableScaledBalanceTokenBase} from './base/MintableScaledBalanceTokenBase.sol';
+import {MintableScaledBalanceToken} from './base/MintableScaledBalanceToken.sol';
 
 /**
  * @title VariableDebtToken
@@ -21,7 +21,7 @@ import {MintableScaledBalanceTokenBase} from './base/MintableScaledBalanceTokenB
  * at variable rate mode
  * @dev Transfer and approve functionalities are disabled since its a non-transferable token
  */
-contract VariableDebtToken is DebtTokenBase, MintableScaledBalanceTokenBase, IVariableDebtToken {
+contract VariableDebtToken is DebtTokenBase, MintableScaledBalanceToken, IVariableDebtToken {
   using WadRayMath for uint256;
   using SafeCast for uint256;
 
@@ -35,7 +35,7 @@ contract VariableDebtToken is DebtTokenBase, MintableScaledBalanceTokenBase, IVa
     IPool pool
   )
     DebtTokenBase()
-    MintableScaledBalanceTokenBase(pool, 'VARIABLE_DEBT_TOKEN_IMPL', 'VARIABLE_DEBT_TOKEN_IMPL', 0)
+    MintableScaledBalanceToken(pool, 'VARIABLE_DEBT_TOKEN_IMPL', 'VARIABLE_DEBT_TOKEN_IMPL', 0)
   {
     // Intentionally left blank
   }
