@@ -256,6 +256,76 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
   }
 
   /**
+   * @notice Implements the basic logic to transfer scaled balance tokens between two users
+   * @dev It emits a mint event with the interest accrued per user
+   * @dev The scaled transfer amount is rounded up so the recipient receives at least the requested amount
+   * @param sender The source address
+   * @param recipient The destination address
+   * @param rebasedAmount The amount getting transferred
+   * @param index The next liquidity index of the reserve
+   */
+  function _transferScaled(
+    address sender,
+    address recipient,
+    uint256 rebasedAmount,
+    uint256 index
+  ) internal {
+    uint128 scaledAmount = _getScaledAmount(rebasedAmount, index, RoundingMode.ROUND_UP)
+      .toUint128();
+
+    uint256 senderScaledOldBalance = _userState[sender].balance;
+    uint256 senderAccruedRebasedBalance = senderScaledOldBalance.rayMul(index) -
+      senderScaledOldBalance.rayMul(_userState[sender].additionalData);
+
+    _userState[sender].balance = senderScaledOldBalance.toUint128() - scaledAmount;
+
+    uint256 recipientScaledOldBalance = _userState[recipient].balance;
+    uint256 recipientAccruedRebasedBalance = recipientScaledOldBalance.rayMul(index) -
+      recipientScaledOldBalance.rayMul(_userState[recipient].additionalData);
+
+    _userState[recipient].balance = recipientScaledOldBalance.toUint128() + scaledAmount;
+
+    _userState[sender].additionalData = index.toUint128();
+    _userState[recipient].additionalData = index.toUint128();
+
+    if (address(_incentivesController) != address(0)) {
+      uint256 currentTotalSupply = _totalSupply;
+      _incentivesController.handleAction(sender, currentTotalSupply, senderScaledOldBalance);
+      if (sender != recipient) {
+        _incentivesController.handleAction(
+          recipient,
+          currentTotalSupply,
+          recipientScaledOldBalance
+        );
+      }
+    }
+
+    if (senderAccruedRebasedBalance > 0) {
+      emit Transfer(address(0), sender, senderAccruedRebasedBalance);
+      emit Mint(
+        _msgSender(),
+        sender,
+        senderAccruedRebasedBalance,
+        senderAccruedRebasedBalance,
+        index
+      );
+    }
+
+    if (sender != recipient && recipientAccruedRebasedBalance > 0) {
+      emit Transfer(address(0), recipient, recipientAccruedRebasedBalance);
+      emit Mint(
+        _msgSender(),
+        recipient,
+        recipientAccruedRebasedBalance,
+        recipientAccruedRebasedBalance,
+        index
+      );
+    }
+
+    emit Transfer(sender, recipient, rebasedAmount);
+  }
+
+  /**
    * @notice Updates `owner`'s allowance for `spender` based on `correctedAmount` spent
    * @param owner The owner of the tokens
    * @param spender The user allowed to spend on behalf of the owner
