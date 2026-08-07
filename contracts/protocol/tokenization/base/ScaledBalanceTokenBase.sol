@@ -10,11 +10,11 @@ import {IScaledBalanceToken} from '../../../interfaces/IScaledBalanceToken.sol';
 import {IncentivizedERC20} from './IncentivizedERC20.sol';
 
 /**
- * @title ScaledBalanceTokenBase
+ * @title MintableScaledBalanceTokenBase
  * @author Aave
  * @notice Basic ERC20 implementation of scaled balance token
  */
-abstract contract ScaledBalanceTokenBase is IncentivizedERC20, IScaledBalanceToken {
+abstract contract MintableScaledBalanceTokenBase is IncentivizedERC20, IScaledBalanceToken {
   using WadRayMath for uint256;
   using SafeCast for uint256;
 
