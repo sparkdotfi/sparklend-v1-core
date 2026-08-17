@@ -67,7 +67,8 @@ abstract contract MintableScaledBalanceToken is IncentivizedERC20, IScaledBalanc
    * @param caller The address performing the mint
    * @param onBehalfOf The address of the user that will receive the scaled tokens
    * @param rebasedAmount The amount of tokens getting minted
-   * @param index The next liquidity index of the reserve
+   * @param index The index of the reserve
+   * @param roundingMode The rounding mode to use when converting a rebase amount to a scaled amount
    * @return `true` if the the previous balance of the user was 0
    */
   function _mintScaled(
@@ -109,10 +110,11 @@ abstract contract MintableScaledBalanceToken is IncentivizedERC20, IScaledBalanc
    * @notice Implements the basic logic to burn a scaled balance token.
    * @dev In some instances, a burn transaction will emit a mint event
    * if the amount to burn is less than the interest that the user accrued
-   * @param user The user which debt is burnt
+   * @param user The user whose balance is burnt
    * @param target The address that will receive the underlying, if any
    * @param rebasedAmount The amount getting burned
-   * @param index The variable debt index of the reserve
+   * @param index The index of the reserve
+   * @param roundingMode The rounding mode to use when converting a rebase amount to a scaled amount
    */
   function _burnScaled(
     address user,

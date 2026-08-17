@@ -2,7 +2,6 @@
 pragma solidity ^0.8.10;
 
 import {Context} from '../../../dependencies/openzeppelin/contracts/Context.sol';
-import {IERC20} from '../../../dependencies/openzeppelin/contracts/IERC20.sol';
 import {IERC20Detailed} from '../../../dependencies/openzeppelin/contracts/IERC20Detailed.sol';
 import {Errors} from '../../libraries/helpers/Errors.sol';
 import {IAaveIncentivesController} from '../../../interfaces/IAaveIncentivesController.sol';

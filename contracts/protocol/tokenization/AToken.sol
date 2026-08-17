@@ -270,8 +270,7 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
     uint256 rebasedAmount,
     uint256 index
   ) internal {
-    uint128 scaledAmount = _getScaledAmount(rebasedAmount, index, RoundingMode.ROUND_UP)
-      .toUint128();
+    uint128 scaledAmount = _getScaledAmount(rebasedAmount, index).toUint128();
 
     uint256 senderScaledOldBalance = _userState[sender].balance;
     uint256 senderAccruedRebasedBalance = senderScaledOldBalance.rayMul(index) -
