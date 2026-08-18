@@ -2,7 +2,7 @@
 
 ## 1. Understanding the Issue
 
-The invariant violation originally demonstrated by `test_sameAssetLiquidationLeak` was a subtle rate mispricing bug that occurred specifically when a user's `debtAsset` and `collateralAsset` were the **exact same reserve**, and the liquidator chose to receive the underlying asset (`receiveAToken == false`).
+The invariant violation originally demonstrated by `test_sameAssetLiquidationLeak` (in https://github.com/sparkdotfi/sparklend-testing) was a subtle rate mispricing bug that occurred specifically when a user's `debtAsset` and `collateralAsset` were the **exact same reserve**, and the liquidator chose to receive the underlying asset (`receiveAToken == false`).
 
 To understand why this happened, we can trace the original execution flow of `executeLiquidationCall` in `LiquidationLogic.sol`:
 
@@ -37,6 +37,7 @@ The mitigation passes `actualDebtToLiquidate` as `liquidityAdded` to the second 
 Originally, `test_sameAssetLiquidationLeak` existed to demonstrate the issue and asserted that a shortfall accrued. After applying the fix, the test was converted into a regression test, `test_sameAssetLiquidation_doesNotLeak`, asserting that no shortfall occurs (`assertEq(unbacked, 0, "mispricing accrued a shortfall")`).
 
 Running `forge test --mt test_sameAssetLiquidation_doesNotLeak` passes successfully:
+
 ```
 [PASS] test_sameAssetLiquidation_doesNotLeak()
 ```
@@ -45,7 +46,7 @@ This confirms that unbacked claims remain at exactly `0` after 30 days of simula
 
 ## 3. Investigation of Potential Side Effects
 
-I investigated the mitigation for potential side effects and edge cases:
+The investigated mitigation for potential side effects and edge cases:
 
 - **Double counting of `actualDebtToLiquidate`?**
   No double counting occurs. The first call to `updateInterestRates` writes a rate to storage, but the second call recalculates the rate from scratch using the current `aToken.balanceOf()`. Since no underlying transfers occur between the two calls, `aToken.balanceOf()` is the same for both. The second calculation uses `aToken.balanceOf() + actualDebtToLiquidate - actualCollateralToLiquidate`, which perfectly reflects the true final liquidity of the transaction.
