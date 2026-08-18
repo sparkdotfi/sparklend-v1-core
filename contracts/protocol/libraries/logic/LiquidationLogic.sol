@@ -258,7 +258,7 @@ library LiquidationLogic {
     collateralReserve.updateInterestRates(
       collateralReserveCache,
       params.collateralAsset,
-      0,
+      params.collateralAsset == params.debtAsset ? vars.actualDebtToLiquidate : 0,
       vars.actualCollateralToLiquidate
     );
 
