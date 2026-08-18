@@ -68,7 +68,7 @@ abstract contract MintableScaledBalanceToken is IncentivizedERC20, IScaledBalanc
    * @param onBehalfOf The address of the user that will receive the scaled tokens
    * @param rebasedAmount The amount of tokens getting minted
    * @param index The index of the reserve
-   * @param roundingMode The rounding mode to use when converting a rebase amount to a scaled amount
+   * @param roundingMode The rounding mode to use when converting a rebased amount to a scaled amount
    * @return `true` if the the previous balance of the user was 0
    */
   function _mintScaled(
@@ -114,7 +114,7 @@ abstract contract MintableScaledBalanceToken is IncentivizedERC20, IScaledBalanc
    * @param target The address that will receive the underlying, if any
    * @param rebasedAmount The amount getting burned
    * @param index The index of the reserve
-   * @param roundingMode The rounding mode to use when converting a rebase amount to a scaled amount
+   * @param roundingMode The rounding mode to use when converting a rebased amount to a scaled amount
    */
   function _burnScaled(
     address user,
