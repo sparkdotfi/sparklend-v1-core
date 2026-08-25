@@ -253,7 +253,7 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
       );
     }
 
-    emit BalanceTransfer(from, to, _getScaledAmount(rebasedAmount, index), index);
+    emit BalanceTransfer(from, to, _getScaledAmount(rebasedAmount, index, roundingMode), index);
   }
 
   /**
