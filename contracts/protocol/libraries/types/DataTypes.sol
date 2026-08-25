@@ -144,6 +144,9 @@ library DataTypes {
     InterestRateMode interestRateMode;
     address onBehalfOf;
     bool useATokens;
+    uint8 userEModeCategory;
+    uint256 reservesCount;
+    address oracle;
   }
 
   struct ExecuteWithdrawParams {

@@ -128,7 +128,7 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
   ) external virtual override onlyPool {
     // Being a normal transfer, the Transfer() and BalanceTransfer() are emitted
     // so no need to emit a specific event here
-    _transfer(from, to, value, false);
+    _transfer(from, to, value, false, RoundingMode.ROUND_DOWN);
   }
 
   /// @inheritdoc IERC20
@@ -201,7 +201,7 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
 
   /// @inheritdoc IERC20
   function transfer(address recipient, uint256 amount) external virtual override returns (bool) {
-    _transfer(_msgSender(), recipient, amount.toUint128(), true);
+    _transfer(_msgSender(), recipient, amount.toUint128(), true, RoundingMode.ROUND_UP);
     return true;
   }
 
@@ -213,7 +213,7 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
   ) external virtual returns (bool) {
     _spendAllowance(sender, _msgSender(), amount);
 
-    _transfer(sender, recipient, amount.toUint128(), true);
+    _transfer(sender, recipient, amount.toUint128(), true, RoundingMode.ROUND_UP);
 
     return true;
   }
@@ -230,7 +230,8 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
     address from,
     address to,
     uint256 rebasedAmount,
-    bool validate
+    bool validate,
+    RoundingMode roundingMode
   ) internal virtual {
     address underlyingAsset = _underlyingAsset;
 
@@ -239,7 +240,7 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
     uint256 senderStartingRebasedBalance = _getRebasedAmount(scaledBalanceOf(from), index);
     uint256 recipientStartingRebasedBalance = _getRebasedAmount(scaledBalanceOf(to), index);
 
-    _transferScaled(from, to, rebasedAmount, index);
+    _transferScaled(from, to, rebasedAmount, index, roundingMode);
 
     if (validate) {
       POOL.finalizeTransfer(
@@ -268,9 +269,10 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
     address sender,
     address recipient,
     uint256 rebasedAmount,
-    uint256 index
+    uint256 index,
+    RoundingMode roundingMode
   ) internal {
-    uint128 scaledAmount = _getScaledAmount(rebasedAmount, index).toUint128();
+    uint128 scaledAmount = _getScaledAmount(rebasedAmount, index, roundingMode).toUint128();
 
     uint256 senderScaledOldBalance = _userState[sender].balance;
     uint256 senderAccruedRebasedBalance = senderScaledOldBalance.rayMul(index) -

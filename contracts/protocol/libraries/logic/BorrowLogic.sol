@@ -180,6 +180,7 @@ library BorrowLogic {
   function executeRepay(
     mapping(address => DataTypes.ReserveData) storage reservesData,
     mapping(uint256 => address) storage reservesList,
+    mapping(uint8 => DataTypes.EModeCategory) storage eModeCategories,
     DataTypes.UserConfigurationMap storage userConfig,
     DataTypes.ExecuteRepayParams memory params
   ) external returns (uint256) {
@@ -249,6 +250,17 @@ library BorrowLogic {
         reserveCache.aTokenAddress,
         paybackAmount,
         reserveCache.nextLiquidityIndex
+      );
+
+      ValidationLogic.validateHealthFactor(
+        reservesData,
+        reservesList,
+        eModeCategories,
+        userConfig,
+        params.onBehalfOf,
+        params.userEModeCategory,
+        params.reservesCount,
+        params.oracle
       );
     } else {
       IERC20(params.asset).safeTransferFrom(msg.sender, reserveCache.aTokenAddress, paybackAmount);
