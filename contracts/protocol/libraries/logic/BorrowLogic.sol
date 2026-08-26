@@ -124,17 +124,6 @@ library BorrowLogic {
       (isFirstBorrowing, reserveCache.nextScaledVariableDebt) = IVariableDebtToken(
         reserveCache.variableDebtTokenAddress
       ).mint(params.user, params.onBehalfOf, params.amount, reserveCache.nextVariableBorrowIndex);
-
-      ValidationLogic.validateHealthFactor(
-        reservesData,
-        reservesList,
-        eModeCategories,
-        userConfig,
-        params.onBehalfOf,
-        params.userEModeCategory,
-        params.reservesCount,
-        params.oracle
-      );
     }
 
     if (isFirstBorrowing) {
@@ -163,6 +152,17 @@ library BorrowLogic {
     if (params.releaseUnderlying) {
       IAToken(reserveCache.aTokenAddress).transferUnderlyingTo(params.user, params.amount);
     }
+
+    ValidationLogic.validateHealthFactor(
+      reservesData,
+      reservesList,
+      eModeCategories,
+      userConfig,
+      params.onBehalfOf,
+      params.userEModeCategory,
+      params.reservesCount,
+      params.oracle
+    );
 
     emit Borrow(
       params.asset,
