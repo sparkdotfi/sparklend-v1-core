@@ -126,8 +126,8 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
     address to,
     uint256 value
   ) external virtual override onlyPool {
-    // Being a normal transfer, the Transfer() and BalanceTransfer() are emitted
-    // so no need to emit a specific event here
+    // The `Transfer` and `BalanceTransfer` events are emitted in `_transfer`.
+    // Round scaled amount down to prevent potential liquidation abuses.
     _transfer(from, to, value, false, RoundingMode.ROUND_DOWN);
   }
 
@@ -225,6 +225,7 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
    * @param to The destination address
    * @param rebasedAmount The amount getting transferred
    * @param validate True if the transfer needs to be validated, false otherwise
+   * @param roundingMode The rounding mode to use when converting a rebased amount to a scaled amount
    */
   function _transfer(
     address from,
@@ -240,7 +241,11 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
     uint256 senderStartingRebasedBalance = _getRebasedAmount(scaledBalanceOf(from), index);
     uint256 recipientStartingRebasedBalance = _getRebasedAmount(scaledBalanceOf(to), index);
 
-    _transferScaled(from, to, rebasedAmount, index, roundingMode);
+    uint128 scaledAmount = _getScaledAmount(rebasedAmount, index, roundingMode).toUint128();
+
+    _transferScaled(from, to, scaledAmount, index);
+
+    emit Transfer(from, to, rebasedAmount);
 
     if (validate) {
       POOL.finalizeTransfer(
@@ -253,27 +258,23 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
       );
     }
 
-    emit BalanceTransfer(from, to, _getScaledAmount(rebasedAmount, index, roundingMode), index);
+    emit BalanceTransfer(from, to, scaledAmount, index);
   }
 
   /**
    * @notice Implements the basic logic to transfer scaled balance tokens between two users
    * @dev It emits a mint event with the interest accrued per user
-   * @dev The scaled transfer amount is rounded up so the recipient receives at least the requested amount
    * @param sender The source address
    * @param recipient The destination address
-   * @param rebasedAmount The amount getting transferred
+   * @param scaledAmount The scaled amount getting transferred
    * @param index The next liquidity index of the reserve
    */
   function _transferScaled(
     address sender,
     address recipient,
-    uint256 rebasedAmount,
-    uint256 index,
-    RoundingMode roundingMode
+    uint128 scaledAmount,
+    uint256 index
   ) internal {
-    uint128 scaledAmount = _getScaledAmount(rebasedAmount, index, roundingMode).toUint128();
-
     uint256 senderScaledOldBalance = _userState[sender].balance;
     uint256 senderAccruedRebasedBalance = senderScaledOldBalance.rayMul(index) -
       senderScaledOldBalance.rayMul(_userState[sender].additionalData);
@@ -322,8 +323,6 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
         index
       );
     }
-
-    emit Transfer(sender, recipient, rebasedAmount);
   }
 
   /**
