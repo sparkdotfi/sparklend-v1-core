@@ -100,10 +100,18 @@ rebased equality.
 
 ### Invariant campaign
 
-Run separately (slow). It carries the **same single pre-existing handler failure** (`[FAIL: 30]`,
-`BORROWING_NOT_ENABLED`) that the baseline and the shipped branch both have — a handler-bounds defect in
-the test, not a protocol invariant violation. No new invariant violation was introduced. *(See the run
-log; if this line is stale, re-run `forge test --match-contract Invariant`.)*
+Run separately (slow: ~2.5 min). Result: **3 passed, 2 failed**. Both failures are `[FAIL: 30]`
+(`BORROWING_NOT_ENABLED`) with `runs: 1, calls: 1, reverts: 1` — i.e. the fuzzer's **first** handler call
+reverted and `fail_on_revert = true` aborted the campaign. That is the pre-existing handler-bounds defect
+(the handler tries to borrow from a reserve without borrowing enabled; which reserve it picks first is
+seed-dependent), not a protocol-invariant violation. It is the same class of failure the baseline and the
+shipped branch carry.
+
+Decisively, the one campaign that actually **executed** — `InvariantsHighBorrowVolumeVolatile`, the
+multi-collateral high-volume scenario — ran **48 runs / 4,800 calls / 0 reverts and held
+`invariant_full()`**. That is the real solvency signal, and it is clean under the spike. The handler
+should be fixed (bound borrows to borrowing-enabled reserves) so all three campaigns execute; that is
+test-harness work independent of this spike.
 
 ## Verdict on "cleaner conceptually"
 
