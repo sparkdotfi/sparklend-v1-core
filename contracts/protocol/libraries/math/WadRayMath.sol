@@ -92,6 +92,72 @@ library WadRayMath {
   }
 
   /**
+   * @notice Multiplies two ray, rounding down
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raymul b, rounded down
+   */
+  function rayMulFloor(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      // Overflow check: Ensure a * b does not exceed uint256 max
+      if iszero(or(iszero(b), iszero(gt(a, div(not(0), b))))) {
+        revert(0, 0)
+      }
+      c := div(mul(a, b), RAY)
+    }
+  }
+
+  /**
+   * @notice Multiplies two ray, rounding up
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raymul b, rounded up
+   */
+  function rayMulCeil(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      // Overflow check: Ensure a * b does not exceed uint256 max
+      if iszero(or(iszero(b), iszero(gt(a, div(not(0), b))))) {
+        revert(0, 0)
+      }
+      let product := mul(a, b)
+      c := add(div(product, RAY), iszero(iszero(mod(product, RAY))))
+    }
+  }
+
+  /**
+   * @notice Divides two ray, rounding down
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raydiv b, rounded down
+   */
+  function rayDivFloor(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      // Overflow check: Ensure a * RAY does not exceed uint256 max
+      if or(iszero(b), iszero(iszero(gt(a, div(not(0), RAY))))) {
+        revert(0, 0)
+      }
+      c := div(mul(a, RAY), b)
+    }
+  }
+
+  /**
+   * @notice Divides two ray, rounding up
+   * @param a Ray
+   * @param b Ray
+   * @return c = a raydiv b, rounded up
+   */
+  function rayDivCeil(uint256 a, uint256 b) internal pure returns (uint256 c) {
+    assembly {
+      // Overflow check: Ensure a * RAY does not exceed uint256 max
+      if or(iszero(b), iszero(iszero(gt(a, div(not(0), RAY))))) {
+        revert(0, 0)
+      }
+      let scaled := mul(a, RAY)
+      c := add(div(scaled, b), iszero(iszero(mod(scaled, b))))
+    }
+  }
+
+  /**
    * @dev Casts ray down to wad
    * @dev assembly optimized for improved gas savings, see https://twitter.com/transmissions11/status/1451131036377571328
    * @param a Ray

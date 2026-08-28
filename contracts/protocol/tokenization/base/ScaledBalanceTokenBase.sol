@@ -67,9 +67,9 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     address caller,
     address onBehalfOf,
     uint256 amount,
+    uint256 amountScaled,
     uint256 index
   ) internal returns (bool) {
-    uint256 amountScaled = amount.rayDiv(index);
     require(amountScaled != 0, Errors.INVALID_MINT_AMOUNT);
 
     uint256 scaledBalance = super.balanceOf(onBehalfOf);
@@ -96,8 +96,13 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    * @param amount The amount getting burned
    * @param index The variable debt index of the reserve
    */
-  function _burnScaled(address user, address target, uint256 amount, uint256 index) internal {
-    uint256 amountScaled = amount.rayDiv(index);
+  function _burnScaled(
+    address user,
+    address target,
+    uint256 amount,
+    uint256 amountScaled,
+    uint256 index
+  ) internal returns (bool) {
     require(amountScaled != 0, Errors.INVALID_BURN_AMOUNT);
 
     uint256 scaledBalance = super.balanceOf(user);
@@ -117,6 +122,10 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
       emit Transfer(user, address(0), amountToBurn);
       emit Burn(user, target, amountToBurn, balanceIncrease, index);
     }
+
+    // Aave v3.5 model: the token reports whether the burn zeroed the scaled balance, so the Pool
+    // clears collateral flags on this fact rather than inferring it from a rebased equality.
+    return (scaledBalance - amountScaled == 0);
   }
 
   /**
@@ -127,7 +136,13 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
    * @param amount The amount getting transferred
    * @param index The next liquidity index of the reserve
    */
-  function _transfer(address sender, address recipient, uint256 amount, uint256 index) internal {
+  function _transfer(
+    address sender,
+    address recipient,
+    uint256 amount,
+    uint256 amountScaled,
+    uint256 index
+  ) internal {
     uint256 senderScaledBalance = super.balanceOf(sender);
     uint256 senderBalanceIncrease = senderScaledBalance.rayMul(index) -
       senderScaledBalance.rayMul(_userState[sender].additionalData);
@@ -139,7 +154,7 @@ abstract contract ScaledBalanceTokenBase is MintableIncentivizedERC20, IScaledBa
     _userState[sender].additionalData = index.toUint128();
     _userState[recipient].additionalData = index.toUint128();
 
-    super._transfer(sender, recipient, amount.rayDiv(index).toUint128());
+    super._transfer(sender, recipient, amountScaled.toUint128());
 
     if (senderBalanceIncrease > 0) {
       emit Transfer(address(0), sender, senderBalanceIncrease);

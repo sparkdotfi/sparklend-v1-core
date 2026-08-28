@@ -8,6 +8,7 @@ import {Errors} from '../helpers/Errors.sol';
 import {UserConfiguration} from '../configuration/UserConfiguration.sol';
 import {DataTypes} from '../types/DataTypes.sol';
 import {WadRayMath} from '../math/WadRayMath.sol';
+import {TokenMath} from '../helpers/TokenMath.sol';
 import {PercentageMath} from '../math/PercentageMath.sol';
 import {ValidationLogic} from './ValidationLogic.sol';
 import {ReserveLogic} from './ReserveLogic.sol';
@@ -25,6 +26,7 @@ library SupplyLogic {
   using UserConfiguration for DataTypes.UserConfigurationMap;
   using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
   using WadRayMath for uint256;
+  using TokenMath for uint256;
   using PercentageMath for uint256;
 
   // See `IPool` for descriptions
@@ -70,6 +72,7 @@ library SupplyLogic {
       msg.sender,
       params.onBehalfOf,
       params.amount,
+      params.amount.getATokenMintScaledAmount(reserveCache.nextLiquidityIndex),
       reserveCache.nextLiquidityIndex
     );
 
@@ -115,35 +118,42 @@ library SupplyLogic {
 
     reserve.updateState(reserveCache);
 
-    uint256 userBalance = IAToken(reserveCache.aTokenAddress).scaledBalanceOf(msg.sender).rayMul(
-      reserveCache.nextLiquidityIndex
-    );
+    uint256 amountToWithdraw;
+    uint256 scaledAmountToWithdraw;
+    {
+      uint256 scaledUserBalance = IAToken(reserveCache.aTokenAddress).scaledBalanceOf(msg.sender);
+      if (params.amount == type(uint256).max) {
+        scaledAmountToWithdraw = scaledUserBalance;
+        amountToWithdraw = scaledUserBalance.getATokenBalance(reserveCache.nextLiquidityIndex);
+      } else {
+        scaledAmountToWithdraw = params.amount.getATokenBurnScaledAmount(
+          reserveCache.nextLiquidityIndex
+        );
+        amountToWithdraw = params.amount;
+      }
 
-    uint256 amountToWithdraw = params.amount;
-
-    if (params.amount == type(uint256).max) {
-      amountToWithdraw = userBalance;
+      // Validation is performed in scaled units so the amount checked is exactly the amount burned.
+      ValidationLogic.validateWithdraw(reserveCache, scaledAmountToWithdraw, scaledUserBalance);
     }
-
-    ValidationLogic.validateWithdraw(reserveCache, amountToWithdraw, userBalance);
 
     reserve.updateInterestRates(reserveCache, params.asset, 0, amountToWithdraw);
 
-    bool isCollateral = userConfig.isUsingAsCollateral(reserve.id);
-
-    if (isCollateral && amountToWithdraw == userBalance) {
+    // The token reports whether the burn zeroed the scaled balance; the collateral flag is cleared
+    // on that fact rather than on a rebased equality.
+    if (
+      IAToken(reserveCache.aTokenAddress).burn(
+        msg.sender,
+        params.to,
+        amountToWithdraw,
+        scaledAmountToWithdraw,
+        reserveCache.nextLiquidityIndex
+      ) && userConfig.isUsingAsCollateral(reserve.id)
+    ) {
       userConfig.setUsingAsCollateral(reserve.id, false);
       emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
     }
 
-    IAToken(reserveCache.aTokenAddress).burn(
-      msg.sender,
-      params.to,
-      amountToWithdraw,
-      reserveCache.nextLiquidityIndex
-    );
-
-    if (isCollateral && userConfig.isBorrowingAny()) {
+    if (userConfig.isUsingAsCollateral(reserve.id) && userConfig.isBorrowingAny()) {
       ValidationLogic.validateHFAndLtv(
         reservesData,
         reservesList,
@@ -204,7 +214,9 @@ library SupplyLogic {
             params.fromEModeCategory
           );
         }
-        if (params.balanceFromBefore == params.amount) {
+        // Clear the flag when the sender's scaled balance is now zero (checked after the transfer),
+        // rather than inferring a full exit from a rebased equality.
+        if (IAToken(reserve.aTokenAddress).scaledBalanceOf(params.from) == 0) {
           fromConfig.setUsingAsCollateral(reserveId, false);
           emit ReserveUsedAsCollateralDisabled(params.asset, params.from);
         }

@@ -14,6 +14,7 @@ import {DataTypes} from '../types/DataTypes.sol';
 import {ValidationLogic} from './ValidationLogic.sol';
 import {ReserveLogic} from './ReserveLogic.sol';
 import {IsolationModeLogic} from './IsolationModeLogic.sol';
+import {TokenMath} from '../helpers/TokenMath.sol';
 
 /**
  * @title BorrowLogic library
@@ -27,6 +28,7 @@ library BorrowLogic {
   using UserConfiguration for DataTypes.UserConfigurationMap;
   using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
   using SafeCast for uint256;
+  using TokenMath for uint256;
 
   // See `IPool` for descriptions
   event Borrow(
@@ -123,7 +125,13 @@ library BorrowLogic {
     } else {
       (isFirstBorrowing, reserveCache.nextScaledVariableDebt) = IVariableDebtToken(
         reserveCache.variableDebtTokenAddress
-      ).mint(params.user, params.onBehalfOf, params.amount, reserveCache.nextVariableBorrowIndex);
+      ).mint(
+          params.user,
+          params.onBehalfOf,
+          params.amount,
+          params.amount.getVTokenMintScaledAmount(reserveCache.nextVariableBorrowIndex),
+          reserveCache.nextVariableBorrowIndex
+        );
     }
 
     if (isFirstBorrowing) {
@@ -221,7 +229,12 @@ library BorrowLogic {
     } else {
       reserveCache.nextScaledVariableDebt = IVariableDebtToken(
         reserveCache.variableDebtTokenAddress
-      ).burn(params.onBehalfOf, paybackAmount, reserveCache.nextVariableBorrowIndex);
+      ).burn(
+          params.onBehalfOf,
+          paybackAmount,
+          paybackAmount.getVTokenBurnScaledAmount(reserveCache.nextVariableBorrowIndex),
+          reserveCache.nextVariableBorrowIndex
+        );
     }
 
     reserve.updateInterestRates(
@@ -248,6 +261,7 @@ library BorrowLogic {
         msg.sender,
         reserveCache.aTokenAddress,
         paybackAmount,
+        paybackAmount.getATokenBurnScaledAmount(reserveCache.nextLiquidityIndex),
         reserveCache.nextLiquidityIndex
       );
     } else {
@@ -335,11 +349,22 @@ library BorrowLogic {
 
       (, reserveCache.nextScaledVariableDebt) = IVariableDebtToken(
         reserveCache.variableDebtTokenAddress
-      ).mint(msg.sender, msg.sender, stableDebt, reserveCache.nextVariableBorrowIndex);
+      ).mint(
+          msg.sender,
+          msg.sender,
+          stableDebt,
+          stableDebt.getVTokenMintScaledAmount(reserveCache.nextVariableBorrowIndex),
+          reserveCache.nextVariableBorrowIndex
+        );
     } else {
       reserveCache.nextScaledVariableDebt = IVariableDebtToken(
         reserveCache.variableDebtTokenAddress
-      ).burn(msg.sender, variableDebt, reserveCache.nextVariableBorrowIndex);
+      ).burn(
+          msg.sender,
+          variableDebt,
+          variableDebt.getVTokenBurnScaledAmount(reserveCache.nextVariableBorrowIndex),
+          reserveCache.nextVariableBorrowIndex
+        );
 
       (, reserveCache.nextTotalStableDebt, reserveCache.nextAvgStableBorrowRate) = IStableDebtToken(
         reserveCache.stableDebtTokenAddress

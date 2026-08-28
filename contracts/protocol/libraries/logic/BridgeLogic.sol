@@ -9,6 +9,7 @@ import {DataTypes} from '../types/DataTypes.sol';
 import {UserConfiguration} from '../configuration/UserConfiguration.sol';
 import {ReserveConfiguration} from '../configuration/ReserveConfiguration.sol';
 import {WadRayMath} from '../math/WadRayMath.sol';
+import {TokenMath} from '../helpers/TokenMath.sol';
 import {PercentageMath} from '../math/PercentageMath.sol';
 import {Errors} from '../helpers/Errors.sol';
 import {ValidationLogic} from './ValidationLogic.sol';
@@ -20,6 +21,7 @@ library BridgeLogic {
   using UserConfiguration for DataTypes.UserConfigurationMap;
   using ReserveConfiguration for DataTypes.ReserveConfigurationMap;
   using WadRayMath for uint256;
+  using TokenMath for uint256;
   using PercentageMath for uint256;
   using SafeCast for uint256;
   using GPv2SafeERC20 for IERC20;
@@ -81,6 +83,7 @@ library BridgeLogic {
       msg.sender,
       onBehalfOf,
       amount,
+      amount.getATokenMintScaledAmount(reserveCache.nextLiquidityIndex),
       reserveCache.nextLiquidityIndex
     );
 

@@ -5,6 +5,7 @@ import {IERC20} from '../../dependencies/openzeppelin/contracts/IERC20.sol';
 import {SafeCast} from '../../dependencies/openzeppelin/contracts/SafeCast.sol';
 import {VersionedInitializable} from '../libraries/aave-upgradeability/VersionedInitializable.sol';
 import {WadRayMath} from '../libraries/math/WadRayMath.sol';
+import {TokenMath} from '../libraries/helpers/TokenMath.sol';
 import {Errors} from '../libraries/helpers/Errors.sol';
 import {IPool} from '../../interfaces/IPool.sol';
 import {IAaveIncentivesController} from '../../interfaces/IAaveIncentivesController.sol';
@@ -23,9 +24,10 @@ import {ScaledBalanceTokenBase} from './base/ScaledBalanceTokenBase.sol';
  */
 contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDebtToken {
   using WadRayMath for uint256;
+  using TokenMath for uint256;
   using SafeCast for uint256;
 
-  uint256 public constant DEBT_TOKEN_REVISION = 0x1;
+  uint256 public constant DEBT_TOKEN_REVISION = 0x2;
 
   /**
    * @dev Constructor.
@@ -84,7 +86,7 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
       return 0;
     }
 
-    return scaledBalance.rayMul(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
+    return scaledBalance.getVTokenBalance(POOL.getReserveNormalizedVariableDebt(_underlyingAsset));
   }
 
   /// @inheritdoc IVariableDebtToken
@@ -92,21 +94,23 @@ contract VariableDebtToken is DebtTokenBase, ScaledBalanceTokenBase, IVariableDe
     address user,
     address onBehalfOf,
     uint256 amount,
+    uint256 scaledAmount,
     uint256 index
   ) external virtual override onlyPool returns (bool, uint256) {
     if (user != onBehalfOf) {
       _decreaseBorrowAllowance(onBehalfOf, user, amount);
     }
-    return (_mintScaled(user, onBehalfOf, amount, index), scaledTotalSupply());
+    return (_mintScaled(user, onBehalfOf, amount, scaledAmount, index), scaledTotalSupply());
   }
 
   /// @inheritdoc IVariableDebtToken
   function burn(
     address from,
     uint256 amount,
+    uint256 scaledAmount,
     uint256 index
   ) external virtual override onlyPool returns (uint256) {
-    _burnScaled(from, address(0), amount, index);
+    _burnScaled(from, address(0), amount, scaledAmount, index);
     return scaledTotalSupply();
   }
 

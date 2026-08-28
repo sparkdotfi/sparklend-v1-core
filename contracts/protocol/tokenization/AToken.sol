@@ -7,6 +7,7 @@ import {SafeCast} from '../../dependencies/openzeppelin/contracts/SafeCast.sol';
 import {VersionedInitializable} from '../libraries/aave-upgradeability/VersionedInitializable.sol';
 import {Errors} from '../libraries/helpers/Errors.sol';
 import {WadRayMath} from '../libraries/math/WadRayMath.sol';
+import {TokenMath} from '../libraries/helpers/TokenMath.sol';
 import {IPool} from '../../interfaces/IPool.sol';
 import {IAToken} from '../../interfaces/IAToken.sol';
 import {IAaveIncentivesController} from '../../interfaces/IAaveIncentivesController.sol';
@@ -22,13 +23,14 @@ import {EIP712Base} from './base/EIP712Base.sol';
  */
 contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, IAToken {
   using WadRayMath for uint256;
+  using TokenMath for uint256;
   using SafeCast for uint256;
   using GPv2SafeERC20 for IERC20;
 
   bytes32 public constant PERMIT_TYPEHASH =
     keccak256('Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)');
 
-  uint256 public constant ATOKEN_REVISION = 0x1;
+  uint256 public constant ATOKEN_REVISION = 0x2;
 
   address internal _treasury;
   address internal _underlyingAsset;
@@ -87,9 +89,10 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     address caller,
     address onBehalfOf,
     uint256 amount,
+    uint256 scaledAmount,
     uint256 index
   ) external virtual override onlyPool returns (bool) {
-    return _mintScaled(caller, onBehalfOf, amount, index);
+    return _mintScaled(caller, onBehalfOf, amount, scaledAmount, index);
   }
 
   /// @inheritdoc IAToken
@@ -97,38 +100,55 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
     address from,
     address receiverOfUnderlying,
     uint256 amount,
+    uint256 scaledAmount,
     uint256 index
-  ) external virtual override onlyPool {
-    _burnScaled(from, receiverOfUnderlying, amount, index);
+  ) external virtual override onlyPool returns (bool) {
+    bool zeroBalanceAfterBurn = _burnScaled(
+      from,
+      receiverOfUnderlying,
+      amount,
+      scaledAmount,
+      index
+    );
     if (receiverOfUnderlying != address(this)) {
       IERC20(_underlyingAsset).safeTransfer(receiverOfUnderlying, amount);
     }
+    return zeroBalanceAfterBurn;
   }
 
   /// @inheritdoc IAToken
-  function mintToTreasury(uint256 amount, uint256 index) external virtual override onlyPool {
-    if (amount == 0) {
+  function mintToTreasury(uint256 scaledAmount, uint256 index) external virtual override onlyPool {
+    if (scaledAmount == 0) {
       return;
     }
-    _mintScaled(address(POOL), _treasury, amount, index);
+    _mintScaled(
+      address(POOL),
+      _treasury,
+      scaledAmount.getATokenBalance(index),
+      scaledAmount,
+      index
+    );
   }
 
   /// @inheritdoc IAToken
   function transferOnLiquidation(
     address from,
     address to,
-    uint256 value
+    uint256 amount,
+    uint256 scaledAmount,
+    uint256 index
   ) external virtual override onlyPool {
-    // Being a normal transfer, the Transfer() and BalanceTransfer() are emitted
-    // so no need to emit a specific event here
-    _transfer(from, to, value, false);
+    // The `Transfer` and `BalanceTransfer` events are emitted in `_transfer`. The Pool computed the
+    // scaled amount (rounded down for liquidation) and passes it in.
+    _transfer(from, to, amount, scaledAmount, index, false);
   }
 
   /// @inheritdoc IERC20
   function balanceOf(
     address user
   ) public view virtual override(IncentivizedERC20, IERC20) returns (uint256) {
-    return super.balanceOf(user).rayMul(POOL.getReserveNormalizedIncome(_underlyingAsset));
+    return
+      super.balanceOf(user).getATokenBalance(POOL.getReserveNormalizedIncome(_underlyingAsset));
   }
 
   /// @inheritdoc IERC20
@@ -139,7 +159,7 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
       return 0;
     }
 
-    return currentSupplyScaled.rayMul(POOL.getReserveNormalizedIncome(_underlyingAsset));
+    return currentSupplyScaled.getATokenBalance(POOL.getReserveNormalizedIncome(_underlyingAsset));
   }
 
   /// @inheritdoc IAToken
@@ -200,21 +220,26 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
    * @param amount The amount getting transferred
    * @param validate True if the transfer needs to be validated, false otherwise
    */
-  function _transfer(address from, address to, uint256 amount, bool validate) internal virtual {
+  function _transfer(
+    address from,
+    address to,
+    uint256 amount,
+    uint256 scaledAmount,
+    uint256 index,
+    bool validate
+  ) internal virtual {
     address underlyingAsset = _underlyingAsset;
 
-    uint256 index = POOL.getReserveNormalizedIncome(underlyingAsset);
+    uint256 fromBalanceBefore = super.balanceOf(from).getATokenBalance(index);
+    uint256 toBalanceBefore = super.balanceOf(to).getATokenBalance(index);
 
-    uint256 fromBalanceBefore = super.balanceOf(from).rayMul(index);
-    uint256 toBalanceBefore = super.balanceOf(to).rayMul(index);
-
-    super._transfer(from, to, amount, index);
+    super._transfer(from, to, amount, scaledAmount, index);
 
     if (validate) {
       POOL.finalizeTransfer(underlyingAsset, from, to, amount, fromBalanceBefore, toBalanceBefore);
     }
 
-    emit BalanceTransfer(from, to, amount.rayDiv(index), index);
+    emit BalanceTransfer(from, to, scaledAmount, index);
   }
 
   /**
@@ -224,7 +249,8 @@ contract AToken is VersionedInitializable, ScaledBalanceTokenBase, EIP712Base, I
    * @param amount The amount getting transferred
    */
   function _transfer(address from, address to, uint128 amount) internal virtual override {
-    _transfer(from, to, amount, true);
+    uint256 index = POOL.getReserveNormalizedIncome(_underlyingAsset);
+    _transfer(from, to, amount, uint256(amount).getATokenTransferScaledAmount(index), index, true);
   }
 
   /**
