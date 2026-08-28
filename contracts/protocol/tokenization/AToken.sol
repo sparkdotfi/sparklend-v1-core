@@ -348,7 +348,7 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
     // drop by slightly more than `rebasedAmount`, so we measure the real decrease from the
     // resulting scaled balance to keep the invariant: allowance consumed == balance transferred.
     // The allowance consumption is at most a rounding error's amount higher than the actual
-    // allowance, only to satisfy spending an amount that is less than or qual to the actual
+    // allowance, only to satisfy spending an amount that is less than or equal to the actual
     // allowance.
     uint256 rebasedBalanceDecrease = startingRebasedBalance - endingRebasedBalance;
 
