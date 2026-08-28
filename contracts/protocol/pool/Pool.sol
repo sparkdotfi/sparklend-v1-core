@@ -256,13 +256,17 @@ contract Pool is VersionedInitializable, PoolStorage, IPool {
       BorrowLogic.executeRepay(
         _reserves,
         _reservesList,
+        _eModeCategories,
         _usersConfig[onBehalfOf],
         DataTypes.ExecuteRepayParams({
           asset: asset,
           amount: amount,
           interestRateMode: DataTypes.InterestRateMode(interestRateMode),
           onBehalfOf: onBehalfOf,
-          useATokens: false
+          useATokens: false,
+          userEModeCategory: _usersEModeCategory[onBehalfOf],
+          reservesCount: _reservesCount,
+          oracle: ADDRESSES_PROVIDER.getPriceOracle()
         })
       );
   }
@@ -295,9 +299,19 @@ contract Pool is VersionedInitializable, PoolStorage, IPool {
         amount: amount,
         interestRateMode: DataTypes.InterestRateMode(interestRateMode),
         onBehalfOf: onBehalfOf,
-        useATokens: false
+        useATokens: false,
+        userEModeCategory: _usersEModeCategory[onBehalfOf],
+        reservesCount: _reservesCount,
+        oracle: ADDRESSES_PROVIDER.getPriceOracle()
       });
-      return BorrowLogic.executeRepay(_reserves, _reservesList, _usersConfig[onBehalfOf], params);
+      return
+        BorrowLogic.executeRepay(
+          _reserves,
+          _reservesList,
+          _eModeCategories,
+          _usersConfig[onBehalfOf],
+          params
+        );
     }
   }
 
@@ -311,13 +325,17 @@ contract Pool is VersionedInitializable, PoolStorage, IPool {
       BorrowLogic.executeRepay(
         _reserves,
         _reservesList,
+        _eModeCategories,
         _usersConfig[msg.sender],
         DataTypes.ExecuteRepayParams({
           asset: asset,
           amount: amount,
           interestRateMode: DataTypes.InterestRateMode(interestRateMode),
           onBehalfOf: msg.sender,
-          useATokens: true
+          useATokens: true,
+          userEModeCategory: _usersEModeCategory[msg.sender],
+          reservesCount: _reservesCount,
+          oracle: ADDRESSES_PROVIDER.getPriceOracle()
         })
       );
   }
