@@ -191,16 +191,6 @@ library LiquidationLogic {
       _burnCollateralATokens(collateralReserve, params, vars);
     }
 
-    // Clear the borrower's collateral flag when their scaled balance is now zero, rather than
-    // inferring a full seizure from a rebased equality.
-    if (
-      userConfig.isUsingAsCollateral(collateralReserve.id) &&
-      vars.collateralAToken.scaledBalanceOf(params.user) == 0
-    ) {
-      userConfig.setUsingAsCollateral(collateralReserve.id, false);
-      emit ReserveUsedAsCollateralDisabled(params.collateralAsset, params.user);
-    }
-
     // Transfer fee to treasury if it is non-zero
     if (vars.liquidationProtocolFeeAmount != 0) {
       uint256 liquidityIndex = collateralReserve.getNormalizedIncome();
@@ -220,6 +210,17 @@ library LiquidationLogic {
         scaledLiquidationProtocolFee,
         liquidityIndex
       );
+    }
+
+    // Clear the borrower's collateral flag when their scaled balance is now zero (checked after both
+    // the seizure and the protocol-fee transfer), rather than inferring a full seizure from a rebased
+    // equality. This is the Aave v3.5 collateral-flag model.
+    if (
+      userConfig.isUsingAsCollateral(collateralReserve.id) &&
+      vars.collateralAToken.scaledBalanceOf(params.user) == 0
+    ) {
+      userConfig.setUsingAsCollateral(collateralReserve.id, false);
+      emit ReserveUsedAsCollateralDisabled(params.collateralAsset, params.user);
     }
 
     // Transfers the debt asset being repaid to the aToken, where the liquidity is kept
