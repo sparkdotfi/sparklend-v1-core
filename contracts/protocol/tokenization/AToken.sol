@@ -347,8 +347,8 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
     // (inspired by Aave v3.5). Because the scaled amount is rounded up, the owner's balance can
     // drop by slightly more than `rebasedAmount`, so we measure the real decrease from the
     // resulting scaled balance to keep the invariant: allowance consumed == balance transferred.
-    // The allowance consumption is at most a rounding error's amount higher than the actual
-    // allowance, only to satisfy spending an amount that is less than or equal to the actual
+    // The allowance consumption is at most a rounding error's amount higher than the transfer
+    // amount specified, only to satisfy spending an amount that is less than or equal to the actual
     // allowance.
     uint256 rebasedBalanceDecrease = startingRebasedBalance - endingRebasedBalance;
 
