@@ -52,6 +52,7 @@ library BorrowLogic {
     DataTypes.InterestRateMode interestRateMode
   );
   event IsolationModeTotalDebtUpdated(address indexed asset, uint256 totalDebt);
+  event ReserveUsedAsCollateralDisabled(address indexed reserve, address indexed user);
 
   /**
    * @notice Implements the borrow feature. Borrowing allows users that provided collateral to draw liquidity from the
@@ -267,6 +268,8 @@ library BorrowLogic {
 
       if (isCollateral && IAToken(reserveCache.aTokenAddress).scaledBalanceOf(msg.sender) == 0) {
         userConfig.setUsingAsCollateral(reserve.id, false);
+
+        emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
       }
 
       ValidationLogic.validateHealthFactor(
