@@ -438,14 +438,10 @@ library ValidationLogic {
   /**
    * @notice Validates the action of setting an asset as collateral.
    * @param reserveCache The cached data of the reserve
-   * @param userBalance The balance of the user
    */
   function validateSetUseReserveAsCollateral(
-    DataTypes.ReserveCache memory reserveCache,
-    uint256 userBalance
+    DataTypes.ReserveCache memory reserveCache
   ) internal pure {
-    require(userBalance != 0, Errors.UNDERLYING_BALANCE_ZERO);
-
     (bool isActive, , , , bool isPaused) = reserveCache.reserveConfiguration.getFlags();
     require(isActive, Errors.RESERVE_INACTIVE);
     require(!isPaused, Errors.RESERVE_PAUSED);

@@ -266,22 +266,24 @@ library BorrowLogic {
 
       bool isCollateral = userConfig.isUsingAsCollateral(reserve.id);
 
-      if (isCollateral && IAToken(reserveCache.aTokenAddress).scaledBalanceOf(msg.sender) == 0) {
-        userConfig.setUsingAsCollateral(reserve.id, false);
+      if (isCollateral) {
+        if (IAToken(reserveCache.aTokenAddress).scaledBalanceOf(msg.sender) == 0) {
+          userConfig.setUsingAsCollateral(reserve.id, false);
 
-        emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
+          emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
+        }
+
+        ValidationLogic.validateHealthFactor(
+          reservesData,
+          reservesList,
+          eModeCategories,
+          userConfig,
+          params.onBehalfOf,
+          params.userEModeCategory,
+          params.reservesCount,
+          params.oracle
+        );
       }
-
-      ValidationLogic.validateHealthFactor(
-        reservesData,
-        reservesList,
-        eModeCategories,
-        userConfig,
-        params.onBehalfOf,
-        params.userEModeCategory,
-        params.reservesCount,
-        params.oracle
-      );
     } else {
       IERC20(params.asset).safeTransferFrom(msg.sender, reserveCache.aTokenAddress, paybackAmount);
       IAToken(reserveCache.aTokenAddress).handleRepayment(

@@ -641,17 +641,29 @@ makeSuite('ValidationLogic: Edge cases', (testEnv: TestEnv) => {
     ).to.be.revertedWith(RESERVE_INACTIVE);
   });
 
-  it('validateSetUseReserveAsCollateral() with userBalance == 0 (revert expected)', async () => {
+  it('validateSetUseReserveAsCollateral() enabling with userBalance == 0 (revert expected)', async () => {
     const { pool, users, dai } = testEnv;
     const user = users[0];
 
     await expect(
       pool.connect(user.signer).setUserUseReserveAsCollateral(dai.address, true)
     ).to.be.revertedWith(UNDERLYING_BALANCE_ZERO);
+  });
 
-    await expect(
-      pool.connect(user.signer).setUserUseReserveAsCollateral(dai.address, false)
-    ).to.be.revertedWith(UNDERLYING_BALANCE_ZERO);
+  it('validateSetUseReserveAsCollateral() disabling with userBalance == 0 is a no-op', async () => {
+    const { pool, users, dai, helpersContract } = testEnv;
+    const user = users[0];
+
+    expect(
+      (await helpersContract.getUserReserveData(dai.address, user.address)).usageAsCollateralEnabled
+    ).to.be.false;
+
+    await expect(pool.connect(user.signer).setUserUseReserveAsCollateral(dai.address, false)).to.not
+      .be.reverted;
+
+    expect(
+      (await helpersContract.getUserReserveData(dai.address, user.address)).usageAsCollateralEnabled
+    ).to.be.false;
   });
 
   it('validateFlashloan() with inconsistent params (revert expected)', async () => {
