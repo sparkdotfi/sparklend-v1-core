@@ -258,13 +258,16 @@ library SupplyLogic {
     DataTypes.ReserveData storage reserve = reservesData[asset];
     DataTypes.ReserveCache memory reserveCache = reserve.cache();
 
-    uint256 userBalance = IERC20(reserveCache.aTokenAddress).balanceOf(msg.sender);
-
-    ValidationLogic.validateSetUseReserveAsCollateral(reserveCache, userBalance);
+    ValidationLogic.validateSetUseReserveAsCollateral(reserveCache);
 
     if (useAsCollateral == userConfig.isUsingAsCollateral(reserve.id)) return;
 
     if (useAsCollateral) {
+      require(
+        IAToken(reserve.aTokenAddress).scaledBalanceOf(msg.sender) != 0,
+        Errors.UNDERLYING_BALANCE_ZERO
+      );
+
       require(
         ValidationLogic.validateUseAsCollateral(
           reservesData,
