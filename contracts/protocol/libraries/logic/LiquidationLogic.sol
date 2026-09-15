@@ -183,16 +183,6 @@ library LiquidationLogic {
       vars.actualDebtToLiquidate
     );
 
-    // If the collateral being liquidated is equal to the user balance,
-    // we set the currency as not being used as collateral anymore
-    if (
-      vars.actualCollateralToLiquidate + vars.liquidationProtocolFeeAmount ==
-      vars.userCollateralBalance
-    ) {
-      userConfig.setUsingAsCollateral(collateralReserve.id, false);
-      emit ReserveUsedAsCollateralDisabled(params.collateralAsset, params.user);
-    }
-
     if (params.receiveAToken) {
       _liquidateATokens(reservesData, reservesList, usersConfig, collateralReserve, params, vars);
     } else {
@@ -215,6 +205,15 @@ library LiquidationLogic {
         vars.collateralAToken.RESERVE_TREASURY_ADDRESS(),
         vars.liquidationProtocolFeeAmount
       );
+    }
+
+    // If the user has no collateral left after the liquidation, we set the currency as not being
+    // used as collateral anymore. This is based on the scaled balance rather than on the rebased
+    // amounts, since the burn rounds the scaled amount up (and the aToken transfer rounds it down),
+    // so the rebased amounts can not determine whether the scaled balance is zero.
+    if (vars.collateralAToken.scaledBalanceOf(params.user) == 0) {
+      userConfig.setUsingAsCollateral(collateralReserve.id, false);
+      emit ReserveUsedAsCollateralDisabled(params.collateralAsset, params.user);
     }
 
     // Transfers the debt asset being repaid to the aToken, where the liquidity is kept

@@ -127,14 +127,16 @@ library SupplyLogic {
 
     ValidationLogic.validateWithdraw(reserveCache, amountToWithdraw, userBalance);
 
-    reserve.updateInterestRates(reserveCache, params.asset, 0, amountToWithdraw);
+    // If the underlying is sent to the aToken itself, no liquidity actually leaves the reserve,
+    // so the rate update must not account for it as liquidity taken.
+    reserve.updateInterestRates(
+      reserveCache,
+      params.asset,
+      0,
+      params.to != reserveCache.aTokenAddress ? amountToWithdraw : 0
+    );
 
     bool isCollateral = userConfig.isUsingAsCollateral(reserve.id);
-
-    if (isCollateral && amountToWithdraw == userBalance) {
-      userConfig.setUsingAsCollateral(reserve.id, false);
-      emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
-    }
 
     IAToken(reserveCache.aTokenAddress).burn(
       msg.sender,
@@ -142,6 +144,14 @@ library SupplyLogic {
       amountToWithdraw,
       reserveCache.nextLiquidityIndex
     );
+
+    // The collateral flag is cleared based on the scaled balance after the burn rather than on the
+    // rebased amount, since the burn rounds the scaled amount up and can zero the scaled balance
+    // even when `amountToWithdraw` is below `userBalance`.
+    if (isCollateral && IAToken(reserveCache.aTokenAddress).scaledBalanceOf(msg.sender) == 0) {
+      userConfig.setUsingAsCollateral(reserve.id, false);
+      emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
+    }
 
     if (isCollateral && userConfig.isBorrowingAny()) {
       ValidationLogic.validateHFAndLtv(
@@ -204,7 +214,10 @@ library SupplyLogic {
             params.fromEModeCategory
           );
         }
-        if (params.balanceFromBefore == params.amount) {
+        // The scaled transfer has already been applied at this point. The flag is cleared based on
+        // the resulting scaled balance rather than on the rebased amounts, since the transfer rounds
+        // the scaled amount up and can zero the scaled balance for an amount below the balance.
+        if (IAToken(reserve.aTokenAddress).scaledBalanceOf(params.from) == 0) {
           fromConfig.setUsingAsCollateral(reserveId, false);
           emit ReserveUsedAsCollateralDisabled(params.asset, params.from);
         }
