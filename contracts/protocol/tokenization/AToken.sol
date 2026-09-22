@@ -205,7 +205,19 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
     return true;
   }
 
-  /// @inheritdoc IERC20
+  /**
+   * @notice Moves `amount` underlying units worth of aTokens from `sender` to `recipient`, spending
+   * the caller's allowance.
+   * @dev The allowance is consumed by the sender's actual balance decrease rather than by `amount`.
+   * Because the scaled amount is rounded up, that decrease can exceed `amount` by up to
+   * `ceil(liquidityIndex / RAY)` underlying units, so this call can consume that much more allowance
+   * than requested. It only happens on the call that exhausts the allowance, which is then set to
+   * exactly zero, so a finite approval cannot overdraw more than once. See `_spendAllowance`.
+   * @param sender The address to move the aTokens from
+   * @param recipient The address to move the aTokens to
+   * @param amount The amount of underlying getting transferred
+   * @return `true` if the transfer succeeded
+   */
   function transferFrom(
     address sender,
     address recipient,

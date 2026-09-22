@@ -9,6 +9,7 @@ makeSuite('AToken: rounded transfer allowance', () => {
   const index = BigNumber.from(RAY).mul(3).div(2);
   const higherIndex = BigNumber.from(RAY).mul(8).div(5);
   const exactIndex = BigNumber.from(RAY).mul(2);
+  const overdrawIndex = BigNumber.from(RAY).mul(29).div(10);
   const requestedAmount = BigNumber.from(2);
 
   let deployer: Signer;
@@ -129,6 +130,27 @@ makeSuite('AToken: rounded transfer allowance', () => {
     expect(await aToken.allowance(ownerAddress, spenderAddress)).to.equal(0);
     expect(await aToken.balanceOf(ownerAddress)).to.equal(156);
     expect(await aToken.balanceOf(recipientAddress)).to.equal(3);
+  });
+
+  it('bounds the per-call allowance overdraw at one scaled unit', async () => {
+    // The scaled amount is rounded up, so the sender balance drops by more than the requested
+    // amount and the allowance is charged for that decrease. The excess is worth at most one
+    // scaled unit, which is `ceil(index / RAY)` unscaled.
+    const maxOverdraw = overdrawIndex.add(RAY).sub(1).div(RAY);
+    await pool.setReserveNormalizedIncome(overdrawIndex);
+    await aToken.connect(owner).approve(spenderAddress, 10);
+
+    const senderBalanceBefore = await aToken.balanceOf(ownerAddress);
+
+    await aToken.connect(spender).transferFrom(ownerAddress, recipientAddress, 3);
+
+    const balanceDecrease = senderBalanceBefore.sub(await aToken.balanceOf(ownerAddress));
+
+    expect(balanceDecrease).to.be.gt(3);
+    expect(balanceDecrease.sub(3)).to.be.lte(maxOverdraw);
+    expect(await aToken.allowance(ownerAddress, spenderAddress)).to.equal(
+      BigNumber.from(10).sub(balanceDecrease)
+    );
   });
 
   it('reverts when allowance does not cover the requested amount', async () => {
