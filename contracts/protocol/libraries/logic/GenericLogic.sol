@@ -197,9 +197,9 @@ library GenericLogic {
     uint256 totalDebtInBaseCurrency,
     uint256 ltv
   ) internal pure returns (uint256) {
-    uint256 availableBorrowsInBaseCurrency = totalCollateralInBaseCurrency.percentMul(ltv);
+    uint256 availableBorrowsInBaseCurrency = totalCollateralInBaseCurrency.percentMulFloor(ltv);
 
-    if (availableBorrowsInBaseCurrency < totalDebtInBaseCurrency) {
+    if (availableBorrowsInBaseCurrency <= totalDebtInBaseCurrency) {
       return 0;
     }
 
