@@ -113,6 +113,11 @@ library SupplyLogic {
     DataTypes.ReserveData storage reserve = reservesData[params.asset];
     DataTypes.ReserveCache memory reserveCache = reserve.cache();
 
+    // Withdrawing to the aToken itself burns the caller's aTokens without moving any underlying,
+    // which understates the liquidity taken in the rate update below and strands the underlying
+    // with no claim against it.
+    require(params.to != reserveCache.aTokenAddress, 'WITHDRAW_TO_ATOKEN_NOT_ALLOWED');
+
     reserve.updateState(reserveCache);
 
     uint256 userBalance = IAToken(reserveCache.aTokenAddress)
@@ -126,11 +131,6 @@ library SupplyLogic {
     }
 
     ValidationLogic.validateWithdraw(reserveCache, amountToWithdraw, userBalance);
-
-    // Withdrawing to the aToken itself burns the caller's aTokens without moving any underlying,
-    // which understates the liquidity taken in the rate update below and strands the underlying
-    // with no claim against it.
-    require(params.to != reserveCache.aTokenAddress, 'WITHDRAW_TO_ATOKEN_NOT_ALLOWED');
 
     reserve.updateInterestRates(reserveCache, params.asset, 0, amountToWithdraw);
 
