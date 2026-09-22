@@ -273,16 +273,18 @@ library BorrowLogic {
           emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
         }
 
-        ValidationLogic.validateHealthFactor(
-          reservesData,
-          reservesList,
-          eModeCategories,
-          userConfig,
-          params.onBehalfOf,
-          params.userEModeCategory,
-          params.reservesCount,
-          params.oracle
-        );
+        if (userConfig.isBorrowingAny()) {
+          ValidationLogic.validateHealthFactor(
+            reservesData,
+            reservesList,
+            eModeCategories,
+            userConfig,
+            params.onBehalfOf,
+            params.userEModeCategory,
+            params.reservesCount,
+            params.oracle
+          );
+        }
       }
     } else {
       IERC20(params.asset).safeTransferFrom(msg.sender, reserveCache.aTokenAddress, paybackAmount);
