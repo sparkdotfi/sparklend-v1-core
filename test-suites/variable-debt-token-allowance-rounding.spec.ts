@@ -13,7 +13,7 @@ import { makeSuite } from './helpers/make-suite';
 makeSuite('VariableDebtToken: rounded borrow allowance', () => {
   const index = BigNumber.from(RAY).mul(3).div(2);
   const exactIndex = BigNumber.from(RAY).mul(2);
-  const overdrawIndex = BigNumber.from(RAY).mul(29).div(10);
+  const roundingIndex = BigNumber.from(RAY).mul(29).div(10);
 
   let deployer: Signer;
   let delegator: Signer;
@@ -142,25 +142,33 @@ makeSuite('VariableDebtToken: rounded borrow allowance', () => {
     expect(await variableDebtToken.balanceOf(delegatorAddress)).to.equal(2);
   });
 
-  it('bounds the per-call allowance overdraw at one scaled unit', async () => {
-    // The scaled amount is rounded up, so the delegator debt grows by more than the requested
-    // amount and the allowance is charged for that increase. The excess is worth at most one
-    // scaled unit, which is `ceil(index / RAY)` unscaled.
-    const maxOverdraw = overdrawIndex.add(RAY).sub(1).div(RAY);
-    await pool.setReserveNormalizedVariableDebt(overdrawIndex);
+  it('consumes more allowance than requested while the allowance has headroom', async () => {
+    // At an index of 2.9 a request of 3 rounds up to 2 scaled units, worth 6 unscaled. The
+    // allowance is charged that 6, which is 3 more than requested. 3 is `ceil(2.9)`, the largest
+    // excess this index can produce, and it is charged here even though the allowance has headroom.
+    await pool.setReserveNormalizedVariableDebt(roundingIndex);
     await variableDebtToken.connect(delegator).approveDelegation(delegateeAddress, 10);
-
-    const debtBefore = await variableDebtToken.balanceOf(delegatorAddress);
 
     await delegatedMint(3);
 
-    const debtIncrease = (await variableDebtToken.balanceOf(delegatorAddress)).sub(debtBefore);
+    expect(await variableDebtToken.balanceOf(delegatorAddress)).to.equal(6);
+    expect(await variableDebtToken.borrowAllowance(delegatorAddress, delegateeAddress)).to.equal(4);
+  });
 
-    expect(debtIncrease).to.be.gt(3);
-    expect(debtIncrease.sub(3)).to.be.lte(maxOverdraw);
-    expect(await variableDebtToken.borrowAllowance(delegatorAddress, delegateeAddress)).to.equal(
-      BigNumber.from(10).sub(debtIncrease)
-    );
+  it('overruns the remaining allowance on the borrow that exhausts it', async () => {
+    // The same borrow against a delegation of exactly 3. The debt still grows by 6, so 6 is drawn
+    // while the allowance only covered 3. Consumption is capped at the allowance, which lands at
+    // zero, so this one delegation cannot be overrun a second time.
+    await pool.setReserveNormalizedVariableDebt(roundingIndex);
+    await variableDebtToken.connect(delegator).approveDelegation(delegateeAddress, 3);
+
+    await delegatedMint(3);
+
+    expect(await variableDebtToken.balanceOf(delegatorAddress)).to.equal(6);
+    expect(await variableDebtToken.borrowAllowance(delegatorAddress, delegateeAddress)).to.equal(0);
+
+    await expect(delegatedMint(3)).to.be.reverted;
+    expect(await variableDebtToken.balanceOf(delegatorAddress)).to.equal(6);
   });
 
   it('reverts without changing debt when allowance does not cover the request', async () => {
