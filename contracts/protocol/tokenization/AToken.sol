@@ -280,14 +280,13 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
       _getRebasedAmount(senderScaledOldBalance, _userState[sender].additionalData);
 
     _userState[sender].balance = senderScaledOldBalance.toUint128() - scaledAmount;
+    _userState[sender].additionalData = index.toUint128();
 
     uint256 recipientScaledOldBalance = _userState[recipient].balance;
     uint256 recipientAccruedRebasedBalance = _getRebasedAmount(recipientScaledOldBalance, index) -
       _getRebasedAmount(recipientScaledOldBalance, _userState[recipient].additionalData);
 
     _userState[recipient].balance = recipientScaledOldBalance.toUint128() + scaledAmount;
-
-    _userState[sender].additionalData = index.toUint128();
     _userState[recipient].additionalData = index.toUint128();
 
     if (address(_incentivesController) != address(0)) {

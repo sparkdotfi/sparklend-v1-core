@@ -171,15 +171,15 @@ abstract contract MintableScaledBalanceToken is IncentivizedERC20, IScaledBalanc
   }
 
   function _getRebasedAmount(
-    uint256 amount,
+    uint256 scaledAmount,
     uint256 index,
     RoundingMode roundingMode
   ) internal pure returns (uint256) {
     if (roundingMode == RoundingMode.ROUND_DOWN) {
-      return amount.rayMulFloor(index);
+      return scaledAmount.rayMulFloor(index);
     }
     if (roundingMode == RoundingMode.ROUND_UP) {
-      return amount.rayMulCeil(index);
+      return scaledAmount.rayMulCeil(index);
     }
     revert('Invalid Rounding Mode');
   }
