@@ -10,12 +10,13 @@ import {IInitializableAToken} from './IInitializableAToken.sol';
  * @author Aave
  * @notice Defines the basic interface for an AToken.
  * @dev Allowances are denominated in underlying amounts while balances are held in scaled units, so
- * allowance accounting deviates slightly from ERC-20. A single `transferFrom` can consume up to
- * `ceil(liquidityIndex / RAY)` underlying units more than the amount requested, because the scaled
- * amount is rounded up and the owner's balance therefore drops by slightly more. This can only
- * happen on the call that exhausts the allowance, which is then set to exactly zero, so one finite
- * approval can never overdraw more than once. An `approve(X)` followed by `transferFrom(X)` is
- * guaranteed not to revert for insufficient allowance.
+ * allowance accounting deviates slightly from ERC-20. The allowance is charged for the owner's
+ * actual balance decrease, and because the scaled amount is rounded up that decrease can exceed the
+ * amount requested. Each call can therefore consume up to `ceil(liquidityIndex / RAY)` more
+ * allowance than requested, whether or not the allowance has headroom. Only the call that exhausts
+ * the allowance can move more than the remaining allowance covers, and it then sets the allowance to
+ * zero, so a finite approval is overrun at most once. An `approve(X)` followed by `transferFrom(X)`
+ * never reverts for insufficient allowance.
  */
 interface IAToken is IERC20, IScaledBalanceToken, IInitializableAToken {
   /**

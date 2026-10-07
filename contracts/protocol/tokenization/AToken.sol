@@ -206,13 +206,15 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
   }
 
   /**
-   * @notice Moves `amount` underlying units worth of aTokens from `sender` to `recipient`, spending
-   * the caller's allowance.
+   * @notice Transfers aTokens for `amount` underlying units from `sender` to `recipient`, spending
+   * the caller's allowance. Rounding means the balances on each side move by slightly different
+   * amounts, neither of which is exactly `amount`.
    * @dev The allowance is consumed by the sender's actual balance decrease rather than by `amount`.
-   * Because the scaled amount is rounded up, that decrease can exceed `amount` by up to
-   * `ceil(liquidityIndex / RAY)` underlying units, so this call can consume that much more allowance
-   * than requested. It only happens on the call that exhausts the allowance, which is then set to
-   * exactly zero, so a finite approval cannot overdraw more than once. See `_spendAllowance`.
+   * Because the scaled amount is rounded up, that decrease can exceed `amount`, so each call can
+   * consume up to `ceil(liquidityIndex / RAY)` more allowance than requested, whether or not the
+   * allowance has headroom. Only the call that exhausts the allowance can move more than the
+   * remaining allowance covers, and it then sets the allowance to zero, so a finite approval is
+   * overrun at most once. See `_spendAllowance`.
    * @param sender The address to move the aTokens from
    * @param recipient The address to move the aTokens to
    * @param amount The amount of underlying getting transferred
