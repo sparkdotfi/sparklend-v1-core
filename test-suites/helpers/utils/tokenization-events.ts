@@ -85,6 +85,16 @@ const getBalanceIncrease = (
   return scaledBalance.rayMul(indexAfterAction).sub(scaledBalance.rayMul(indexBeforeAction));
 };
 
+const getATokenBalanceIncrease = (
+  scaledBalance: BigNumber,
+  indexBeforeAction: BigNumber,
+  indexAfterAction: BigNumber
+) => {
+  return scaledBalance
+    .rayMulFloor(indexAfterAction)
+    .sub(scaledBalance.rayMulFloor(indexBeforeAction));
+};
+
 export const supply = async (
   pool: Pool,
   user: SignerWithAddress,
@@ -207,8 +217,12 @@ export const transfer = async (
   const deltaScaledBalance = user.address == to ? BigNumber.from(0) : addedScaledBalance;
   const fromScaledBalance = (await aToken.scaledBalanceOf(user.address)).add(deltaScaledBalance);
   const toScaledBalance = (await aToken.scaledBalanceOf(to)).sub(deltaScaledBalance);
-  const fromBalanceIncrease = getBalanceIncrease(fromScaledBalance, fromPreviousIndex, indexAfter);
-  const toBalanceIncrease = getBalanceIncrease(toScaledBalance, toPreviousIndex, indexAfter);
+  const fromBalanceIncrease = getATokenBalanceIncrease(
+    fromScaledBalance,
+    fromPreviousIndex,
+    indexAfter
+  );
+  const toBalanceIncrease = getATokenBalanceIncrease(toScaledBalance, toPreviousIndex, indexAfter);
 
   if (debug) printATokenEvents(aToken, rcpt);
 
@@ -273,8 +287,12 @@ export const transferFrom = async (
   const deltaScaledBalance = origin == to ? BigNumber.from(0) : addedScaledBalance;
   const fromScaledBalance = (await aToken.scaledBalanceOf(origin)).add(deltaScaledBalance);
   const toScaledBalance = (await aToken.scaledBalanceOf(to)).sub(deltaScaledBalance);
-  const fromBalanceIncrease = getBalanceIncrease(fromScaledBalance, fromPreviousIndex, indexAfter);
-  const toBalanceIncrease = getBalanceIncrease(toScaledBalance, toPreviousIndex, indexAfter);
+  const fromBalanceIncrease = getATokenBalanceIncrease(
+    fromScaledBalance,
+    fromPreviousIndex,
+    indexAfter
+  );
+  const toBalanceIncrease = getATokenBalanceIncrease(toScaledBalance, toPreviousIndex, indexAfter);
 
   if (debug) printATokenEvents(aToken, rcpt);
 
