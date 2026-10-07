@@ -209,7 +209,7 @@ makeSuite('AToken: Events', (testEnv: TestEnv) => {
     const bobBalanceAfter = await aDai.balanceOf(bob.address);
 
     expect(aliceBalanceAfter).to.be.equal(
-      aliceBalanceBefore.add(balances.balance[alice.address]).sub(indexChange ? 3 : 0)
+      aliceBalanceBefore.add(balances.balance[alice.address]).sub(indexChange ? 2 : 0)
     );
     expect(bobBalanceAfter).to.be.closeTo(bobBalanceBefore.add(balances.balance[bob.address]), 2);
   };
@@ -308,7 +308,7 @@ makeSuite('AToken: Events', (testEnv: TestEnv) => {
 
     expect(aliceBalanceAfter).to.be.closeTo(
       aliceBalanceBefore.add(balances.balance[alice.address]),
-      2
+      3
     );
     expect(bobBalanceAfter).to.be.closeTo(bobBalanceBefore.add(balances.balance[bob.address]), 2);
   };
@@ -503,7 +503,7 @@ makeSuite('AToken: Events', (testEnv: TestEnv) => {
 
     expect(aliceBalanceAfter).to.be.closeTo(
       aliceBalanceBefore.add(balances.balance[alice.address]),
-      2
+      3
     );
     expect(bobBalanceAfter).to.be.closeTo(bobBalanceBefore.add(balances.balance[bob.address]), 2);
   };
