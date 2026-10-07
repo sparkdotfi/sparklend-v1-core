@@ -361,6 +361,10 @@ interface IPool {
    * - E.g. User repays 100 USDC using 100 aUSDC, burning 100 variable/stable debt tokens
    * @dev  Passing uint256.max as amount will clean up any residual aToken dust balance, if the user aToken
    * balance is not enough to cover the whole debt
+   * @dev  Unlike `repay()`, this function is oracle-dependent. Burning the caller's aTokens reduces their
+   * collateral, so the resulting health factor is validated when the repaid reserve is enabled as collateral
+   * and debt remains. That validation prices every reserve in the caller's position, so the call reverts if
+   * any of those price feeds reverts or is rejected as stale. `repay()` never reads the oracle.
    * @param asset The address of the borrowed underlying asset previously borrowed
    * @param amount The amount to repay
    * - Send the value type(uint256).max in order to repay the whole debt for `asset` on the specific `debtMode`
