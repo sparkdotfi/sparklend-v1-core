@@ -129,13 +129,6 @@ library SupplyLogic {
 
     reserve.updateInterestRates(reserveCache, params.asset, 0, amountToWithdraw);
 
-    bool isCollateral = userConfig.isUsingAsCollateral(reserve.id);
-
-    if (isCollateral && amountToWithdraw == userBalance) {
-      userConfig.setUsingAsCollateral(reserve.id, false);
-      emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
-    }
-
     IAToken(reserveCache.aTokenAddress).burn(
       msg.sender,
       params.to,
@@ -143,18 +136,24 @@ library SupplyLogic {
       reserveCache.nextLiquidityIndex
     );
 
-    if (isCollateral && userConfig.isBorrowingAny()) {
-      ValidationLogic.validateHFAndLtv(
-        reservesData,
-        reservesList,
-        eModeCategories,
-        userConfig,
-        params.asset,
-        msg.sender,
-        params.reservesCount,
-        params.oracle,
-        params.userEModeCategory
-      );
+    if (userConfig.isUsingAsCollateral(reserve.id)) {
+      if (IAToken(reserve.aTokenAddress).scaledBalanceOf(msg.sender) == 0) {
+        userConfig.setUsingAsCollateral(reserve.id, false);
+        emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
+      }
+      if (userConfig.isBorrowingAny()) {
+        ValidationLogic.validateHFAndLtv(
+          reservesData,
+          reservesList,
+          eModeCategories,
+          userConfig,
+          params.asset,
+          msg.sender,
+          params.reservesCount,
+          params.oracle,
+          params.userEModeCategory
+        );
+      }
     }
 
     emit Withdraw(params.asset, msg.sender, params.to, amountToWithdraw);
@@ -191,6 +190,10 @@ library SupplyLogic {
       DataTypes.UserConfigurationMap storage fromConfig = usersConfig[params.from];
 
       if (fromConfig.isUsingAsCollateral(reserveId)) {
+        if (IAToken(reserve.aTokenAddress).scaledBalanceOf(params.from) == 0) {
+          fromConfig.setUsingAsCollateral(reserveId, false);
+          emit ReserveUsedAsCollateralDisabled(params.asset, params.from);
+        }
         if (fromConfig.isBorrowingAny()) {
           ValidationLogic.validateHFAndLtv(
             reservesData,
@@ -203,10 +206,6 @@ library SupplyLogic {
             params.oracle,
             params.fromEModeCategory
           );
-        }
-        if (params.balanceFromBefore == params.amount) {
-          fromConfig.setUsingAsCollateral(reserveId, false);
-          emit ReserveUsedAsCollateralDisabled(params.asset, params.from);
         }
       }
 
