@@ -685,6 +685,25 @@ makeSuite('ValidationLogic: Edge cases', (testEnv: TestEnv) => {
     ).to.be.revertedWith(INCONSISTENT_FLASHLOAN_PARAMS);
   });
 
+  it('validateFlashloan() with duplicate assets (revert expected)', async () => {
+    const { pool, users, dai, aDai } = testEnv;
+    const user = users[0];
+
+    await expect(
+      pool
+        .connect(user.signer)
+        .flashLoan(
+          aDai.address,
+          [dai.address, dai.address],
+          [0, 0],
+          [RateMode.Variable, RateMode.Variable],
+          user.address,
+          '0x00',
+          0
+        )
+    ).to.be.revertedWith(INCONSISTENT_FLASHLOAN_PARAMS);
+  });
+
   it('validateFlashloan() with inactive reserve (revert expected)', async () => {
     const {
       configurator,
