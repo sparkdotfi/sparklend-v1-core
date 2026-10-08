@@ -149,9 +149,9 @@ makeSuite('AToken: rounded transfer allowance', () => {
   });
 
   it('overruns the remaining allowance on the call that exhausts it', async () => {
-    // The same transfer against an allowance of exactly 3. The balance still drops by 6, so 6
-    // moves while the allowance only covered 3. Consumption is capped at the allowance, which
-    // lands at zero, so this one approval cannot be overrun a second time.
+    // The same transfer against an allowance of exactly 3. The balance still drops by 6, so
+    // owner's balance drops by 6 while the allowance only covered 3. Consumption is capped at
+    // the allowance, which lands at zero, so this one approval cannot be overrun a second time.
     await pool.setReserveNormalizedIncome(roundingIndex);
     await aToken.connect(owner).approve(spenderAddress, 3);
 

@@ -208,7 +208,7 @@ contract AToken is VersionedInitializable, MintableScaledBalanceToken, EIP712Bas
   /**
    * @notice Transfers aTokens for `amount` underlying units from `sender` to `recipient`, spending
    * the caller's allowance. Rounding means the balances on each side move by slightly different
-   * amounts, neither of which is exactly `amount`.
+   * amounts, which can differ slightly from `amount`.
    * @dev The allowance is consumed by the sender's actual balance decrease rather than by `amount`.
    * Because the scaled amount is rounded up, that decrease can exceed `amount`, so each call can
    * consume up to `ceil(liquidityIndex / RAY)` more allowance than requested, whether or not the

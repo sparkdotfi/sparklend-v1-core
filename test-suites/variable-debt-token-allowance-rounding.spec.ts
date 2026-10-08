@@ -167,7 +167,10 @@ makeSuite('VariableDebtToken: rounded borrow allowance', () => {
     expect(await variableDebtToken.balanceOf(delegatorAddress)).to.equal(6);
     expect(await variableDebtToken.borrowAllowance(delegatorAddress, delegateeAddress)).to.equal(0);
 
-    await expect(delegatedMint(3)).to.be.reverted;
+    await expect(delegatedMint(3)).to.be.revertedWithCustomError(
+      variableDebtToken,
+      'InsufficientBorrowAllowance'
+    );
     expect(await variableDebtToken.balanceOf(delegatorAddress)).to.equal(6);
   });
 
