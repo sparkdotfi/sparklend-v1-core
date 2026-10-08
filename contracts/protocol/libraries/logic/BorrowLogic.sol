@@ -183,6 +183,9 @@ library BorrowLogic {
    * equivalent amount of debt for the user by burning the corresponding debt token. For isolated positions, it also
    * reduces the isolated debt.
    * @dev  Emits the `Repay()` event
+   * @dev  When `params.useATokens` is true this is oracle-dependent: burning the caller's aTokens reduces
+   * their collateral, so the resulting health factor is validated. The underlying-transfer path never reads
+   * the oracle.
    * @param reservesData The state of all the reserves
    * @param reservesList The addresses of all the active reserves
    * @param userConfig The user configuration mapping that tracks the supplied/borrowed assets
@@ -272,17 +275,18 @@ library BorrowLogic {
 
           emit ReserveUsedAsCollateralDisabled(params.asset, msg.sender);
         }
-
-        ValidationLogic.validateHealthFactor(
-          reservesData,
-          reservesList,
-          eModeCategories,
-          userConfig,
-          params.onBehalfOf,
-          params.userEModeCategory,
-          params.reservesCount,
-          params.oracle
-        );
+        if (userConfig.isBorrowingAny()) {
+          ValidationLogic.validateHealthFactor(
+            reservesData,
+            reservesList,
+            eModeCategories,
+            userConfig,
+            params.onBehalfOf,
+            params.userEModeCategory,
+            params.reservesCount,
+            params.oracle
+          );
+        }
       }
     } else {
       IERC20(params.asset).safeTransferFrom(msg.sender, reserveCache.aTokenAddress, paybackAmount);

@@ -344,6 +344,28 @@ makeSuite('Pool: Edge cases', (testEnv: TestEnv) => {
     ).to.be.revertedWith(CALLER_NOT_ATOKEN);
   });
 
+  it('Tries to withdraw to the aToken address (revert expected)', async () => {
+    const {
+      pool,
+      weth,
+      aWETH,
+      users: [user0],
+    } = testEnv;
+
+    const amount = utils.parseEther('1');
+
+    await weth.connect(user0.signer)['mint(uint256)'](amount);
+    await weth.connect(user0.signer).approve(pool.address, MAX_UINT_AMOUNT);
+    await pool.connect(user0.signer).deposit(weth.address, amount, user0.address, '0');
+
+    await expect(
+      pool.connect(user0.signer).withdraw(weth.address, amount, aWETH.address)
+    ).to.be.revertedWith('WITHDRAW_TO_ATOKEN_NOT_ALLOWED');
+
+    // Withdrawing the same amount to any other address still works
+    expect(await pool.connect(user0.signer).withdraw(weth.address, amount, user0.address));
+  });
+
   it('Tries to call `initReserve()` with an EOA as reserve (revert expected)', async () => {
     const { pool, deployer, users, configurator } = testEnv;
 

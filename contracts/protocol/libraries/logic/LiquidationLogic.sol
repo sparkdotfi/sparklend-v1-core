@@ -183,16 +183,6 @@ library LiquidationLogic {
       vars.actualDebtToLiquidate
     );
 
-    // If the collateral being liquidated is equal to the user balance,
-    // we set the currency as not being used as collateral anymore
-    if (
-      vars.actualCollateralToLiquidate + vars.liquidationProtocolFeeAmount ==
-      vars.userCollateralBalance
-    ) {
-      userConfig.setUsingAsCollateral(collateralReserve.id, false);
-      emit ReserveUsedAsCollateralDisabled(params.collateralAsset, params.user);
-    }
-
     if (params.receiveAToken) {
       _liquidateATokens(reservesData, reservesList, usersConfig, collateralReserve, params, vars);
     } else {
@@ -223,6 +213,11 @@ library LiquidationLogic {
       vars.debtReserveCache.aTokenAddress,
       vars.actualDebtToLiquidate
     );
+
+    if (vars.collateralAToken.scaledBalanceOf(params.user) == 0) {
+      userConfig.setUsingAsCollateral(collateralReserve.id, false);
+      emit ReserveUsedAsCollateralDisabled(params.collateralAsset, params.user);
+    }
 
     IAToken(vars.debtReserveCache.aTokenAddress).handleRepayment(
       msg.sender,
@@ -297,7 +292,9 @@ library LiquidationLogic {
       vars.actualCollateralToLiquidate
     );
 
-    if (liquidatorPreviousATokenBalance == 0) {
+    if (
+      liquidatorPreviousATokenBalance == 0 && vars.collateralAToken.scaledBalanceOf(msg.sender) != 0
+    ) {
       DataTypes.UserConfigurationMap storage liquidatorConfig = usersConfig[msg.sender];
       if (
         ValidationLogic.validateAutomaticUseAsCollateral(
