@@ -9,6 +9,7 @@ makeSuite('AToken: rounded transfer allowance', () => {
   const index = BigNumber.from(RAY).mul(3).div(2);
   const higherIndex = BigNumber.from(RAY).mul(8).div(5);
   const exactIndex = BigNumber.from(RAY).mul(2);
+  const roundingIndex = BigNumber.from(RAY).mul(29).div(10);
   const requestedAmount = BigNumber.from(2);
 
   let deployer: Signer;
@@ -129,6 +130,43 @@ makeSuite('AToken: rounded transfer allowance', () => {
     expect(await aToken.allowance(ownerAddress, spenderAddress)).to.equal(0);
     expect(await aToken.balanceOf(ownerAddress)).to.equal(156);
     expect(await aToken.balanceOf(recipientAddress)).to.equal(3);
+  });
+
+  it('consumes more allowance than requested while the allowance has headroom', async () => {
+    // At an index of 2.9 a request of 3 rounds up to 2 scaled units, worth 6 unscaled. The
+    // allowance is charged that 6, which is 3 more than requested. 3 is `ceil(2.9)`, the largest
+    // excess this index can produce, and it is charged here even though the allowance has headroom.
+    await pool.setReserveNormalizedIncome(roundingIndex);
+    await aToken.connect(owner).approve(spenderAddress, 10);
+
+    expect(await aToken.balanceOf(ownerAddress)).to.equal(290);
+
+    await aToken.connect(spender).transferFrom(ownerAddress, recipientAddress, 3);
+
+    expect(await aToken.balanceOf(ownerAddress)).to.equal(284);
+    expect(await aToken.balanceOf(recipientAddress)).to.equal(5);
+    expect(await aToken.allowance(ownerAddress, spenderAddress)).to.equal(4);
+  });
+
+  it('overruns the remaining allowance on the call that exhausts it', async () => {
+    // The same transfer against an allowance of exactly 3. The balance still drops by 6, so
+    // owner's balance drops by 6 while the allowance only covered 3. Consumption is capped at
+    // the allowance, which lands at zero, so this one approval cannot be overrun a second time.
+    await pool.setReserveNormalizedIncome(roundingIndex);
+    await aToken.connect(owner).approve(spenderAddress, 3);
+
+    expect(await aToken.balanceOf(ownerAddress)).to.equal(290);
+
+    await aToken.connect(spender).transferFrom(ownerAddress, recipientAddress, 3);
+
+    expect(await aToken.balanceOf(ownerAddress)).to.equal(284);
+    expect(await aToken.balanceOf(recipientAddress)).to.equal(5);
+    expect(await aToken.allowance(ownerAddress, spenderAddress)).to.equal(0);
+
+    await expect(
+      aToken.connect(spender).transferFrom(ownerAddress, recipientAddress, 3)
+    ).to.be.revertedWithCustomError(aToken, 'ERC20InsufficientAllowance');
+    expect(await aToken.balanceOf(ownerAddress)).to.equal(284);
   });
 
   it('reverts when allowance does not cover the requested amount', async () => {

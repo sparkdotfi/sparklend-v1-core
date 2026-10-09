@@ -13,6 +13,7 @@ import { makeSuite } from './helpers/make-suite';
 makeSuite('VariableDebtToken: rounded borrow allowance', () => {
   const index = BigNumber.from(RAY).mul(3).div(2);
   const exactIndex = BigNumber.from(RAY).mul(2);
+  const roundingIndex = BigNumber.from(RAY).mul(29).div(10);
 
   let deployer: Signer;
   let delegator: Signer;
@@ -139,6 +140,38 @@ makeSuite('VariableDebtToken: rounded borrow allowance', () => {
 
     expect(await variableDebtToken.borrowAllowance(delegatorAddress, delegateeAddress)).to.equal(8);
     expect(await variableDebtToken.balanceOf(delegatorAddress)).to.equal(2);
+  });
+
+  it('consumes more allowance than requested while the allowance has headroom', async () => {
+    // At an index of 2.9 a request of 3 rounds up to 2 scaled units, worth 6 unscaled. The
+    // allowance is charged that 6, which is 3 more than requested. 3 is `ceil(2.9)`, the largest
+    // excess this index can produce, and it is charged here even though the allowance has headroom.
+    await pool.setReserveNormalizedVariableDebt(roundingIndex);
+    await variableDebtToken.connect(delegator).approveDelegation(delegateeAddress, 10);
+
+    await delegatedMint(3);
+
+    expect(await variableDebtToken.balanceOf(delegatorAddress)).to.equal(6);
+    expect(await variableDebtToken.borrowAllowance(delegatorAddress, delegateeAddress)).to.equal(4);
+  });
+
+  it('overruns the remaining allowance on the borrow that exhausts it', async () => {
+    // The same borrow against a delegation of exactly 3. The debt still grows by 6, so 6 is drawn
+    // while the allowance only covered 3. Consumption is capped at the allowance, which lands at
+    // zero, so this one delegation cannot be overrun a second time.
+    await pool.setReserveNormalizedVariableDebt(roundingIndex);
+    await variableDebtToken.connect(delegator).approveDelegation(delegateeAddress, 3);
+
+    await delegatedMint(3);
+
+    expect(await variableDebtToken.balanceOf(delegatorAddress)).to.equal(6);
+    expect(await variableDebtToken.borrowAllowance(delegatorAddress, delegateeAddress)).to.equal(0);
+
+    await expect(delegatedMint(3)).to.be.revertedWithCustomError(
+      variableDebtToken,
+      'InsufficientBorrowAllowance'
+    );
+    expect(await variableDebtToken.balanceOf(delegatorAddress)).to.equal(6);
   });
 
   it('reverts without changing debt when allowance does not cover the request', async () => {

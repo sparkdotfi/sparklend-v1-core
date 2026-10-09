@@ -25,6 +25,13 @@ interface ICreditDelegationToken {
    * @notice Delegates borrowing power to a user on the specific debt token.
    * Delegation will still respect the liquidation constraints (even if delegated, a
    * delegatee cannot force a delegator HF to go below 1)
+   * @dev The allowance is consumed by the delegator's actual debt increase rather than by the
+   * requested borrow amount. Because the scaled amount is rounded up, that increase can exceed the
+   * requested amount, so each borrow can consume up to `ceil(variableBorrowIndex / RAY)` more
+   * allowance than requested, whether or not the allowance has headroom. Only the borrow that
+   * exhausts the allowance can draw more than the remaining allowance covers, and it then sets the
+   * allowance to zero, so a finite delegation is overrun at most once. Delegating exactly the amount
+   * to be borrowed is therefore always sufficient.
    * @param delegatee The address receiving the delegated borrowing power
    * @param amount The maximum amount being delegated.
    */
