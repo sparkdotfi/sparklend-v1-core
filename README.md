@@ -1,4 +1,4 @@
-# SparkLend Protocol v3.1
+# SparkLend Protocol v1.1
 
 This repository contains the smart contracts source code and markets configuration for SparkLend Protocol V3. The repository uses Hardhat as development environment for compilation, testing and deployment tasks.
 
