@@ -27,3 +27,4 @@ deployments/
 certora-logs
 certora_debug_log.txt
 resource_errors.json
+package-lock.json
