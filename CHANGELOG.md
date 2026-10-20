@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.1.0](https://github.com/sparkdotfi/sparklend-v1-core/compare/v1.0.0...v1.1.0) (2026-10-20)
+
+Upgrades `Pool` to revision 5 and `AToken` and `VariableDebtToken` to revision 2. `StableDebtToken` is not deployed.
+
+### Features
+
+* Round scaled balance conversions in the protocol's favour: aToken mints round down and burns round up, debt mints round up and burns round down; `balanceOf` rounds down on aTokens and up on debt tokens (SC-1569) ([#12](https://github.com/sparkdotfi/sparklend-v1-core/pull/12)) ([52c367b](https://github.com/sparkdotfi/sparklend-v1-core/commit/52c367b85248eec2e769fd6fbc8a6eb770839739))
+* Add `rayMulFloor`, `rayMulCeil`, `rayDivFloor` and `rayDivCeil` to `WadRayMath` ([#12](https://github.com/sparkdotfi/sparklend-v1-core/pull/12)) ([52c367b](https://github.com/sparkdotfi/sparklend-v1-core/commit/52c367b85248eec2e769fd6fbc8a6eb770839739))
+* Validate the health factor after `borrow` and `repayWithATokens` (SC-1650) ([#23](https://github.com/sparkdotfi/sparklend-v1-core/pull/23)) ([d4ea398](https://github.com/sparkdotfi/sparklend-v1-core/commit/d4ea39879c05e5e9f1244221569cc188a226051e)) ([#29](https://github.com/sparkdotfi/sparklend-v1-core/pull/29)) ([900c189](https://github.com/sparkdotfi/sparklend-v1-core/commit/900c189feef2fafb97dca24c7b6e502dd035925a))
+
+### Bug Fixes
+
+* Set and clear the collateral flag on the scaled balance in withdraw, repay and liquidation, including the liquidator flag in `_liquidateATokens` (SC-1700, SC-1708) ([#27](https://github.com/sparkdotfi/sparklend-v1-core/pull/27)) ([5d8dd91](https://github.com/sparkdotfi/sparklend-v1-core/commit/5d8dd91bcdcdc0d8600d2fa15bbceec864757a74)) ([#31](https://github.com/sparkdotfi/sparklend-v1-core/pull/31)) ([90ab66d](https://github.com/sparkdotfi/sparklend-v1-core/commit/90ab66d208ee56ce374c5472779408875aafd03d))
+* Emit `ReserveUsedAsCollateralDisabled` on every path that clears the flag ([#28](https://github.com/sparkdotfi/sparklend-v1-core/pull/28)) ([3e5c36f](https://github.com/sparkdotfi/sparklend-v1-core/commit/3e5c36f7e8241f80e0a55767a605abc4c561c530))
+* Fix same-asset liquidation accounting ([#22](https://github.com/sparkdotfi/sparklend-v1-core/pull/22)) ([ea91c24](https://github.com/sparkdotfi/sparklend-v1-core/commit/ea91c24b1beb348eb2c77d0d70921efd723c7ffb))
+* Skip `mintToTreasury` when the accrued amount scales to zero ([#12](https://github.com/sparkdotfi/sparklend-v1-core/pull/12)) ([52c367b](https://github.com/sparkdotfi/sparklend-v1-core/commit/52c367b85248eec2e769fd6fbc8a6eb770839739))
+* Tolerate a front-run permit in `supplyWithPermit` and `repayWithPermit` (SC-1698) ([#40](https://github.com/sparkdotfi/sparklend-v1-core/pull/40)) ([7d757c0](https://github.com/sparkdotfi/sparklend-v1-core/commit/7d757c01753e5df0140b0e148e6287f86ae6350f))
+* Revert `withdraw` to the aToken address (SC-1699) ([#41](https://github.com/sparkdotfi/sparklend-v1-core/pull/41)) ([96ea42d](https://github.com/sparkdotfi/sparklend-v1-core/commit/96ea42dff63364d962292a08a5fcdb60b80652ca))
+* Reject duplicate assets in `flashLoan` (SC-1712) ([#36](https://github.com/sparkdotfi/sparklend-v1-core/pull/36)) ([3e61764](https://github.com/sparkdotfi/sparklend-v1-core/commit/3e61764fb93dc82d0a6c08a671be5723d882c043))
+* Round aToken transfer accrual events like `balanceOf` (SC-1707) ([#42](https://github.com/sparkdotfi/sparklend-v1-core/pull/42)) ([1a818e7](https://github.com/sparkdotfi/sparklend-v1-core/commit/1a818e79c905f83642bc8ecc5f7204f9110a4a06))
+* Document that `repayWithATokens` is oracle-dependent and that allowances can be overrun by rounding (SC-1706, SC-1713) ([#32](https://github.com/sparkdotfi/sparklend-v1-core/pull/32)) ([b02dc28](https://github.com/sparkdotfi/sparklend-v1-core/commit/b02dc285a131f145a40236f130a0a0a272ca5fee)) ([#43](https://github.com/sparkdotfi/sparklend-v1-core/pull/43)) ([8ebca5d](https://github.com/sparkdotfi/sparklend-v1-core/commit/8ebca5de04ae7749a8fb20354f7e0e282a541f9d))
+* Typos, naming and natspec (SC-1709) ([#21](https://github.com/sparkdotfi/sparklend-v1-core/pull/21)) ([b43f09b](https://github.com/sparkdotfi/sparklend-v1-core/commit/b43f09ba27f6224b14fb1d8766b9636040f0c86f)) ([#39](https://github.com/sparkdotfi/sparklend-v1-core/pull/39)) ([000cbfe](https://github.com/sparkdotfi/sparklend-v1-core/commit/000cbfe60923f7b3d631d312e02c317c7f7a407d))
+
+### Code Refactoring
+
+* Replace `ScaledBalanceTokenBase` and `MintableIncentivizedERC20` with `MintableScaledBalanceToken`; hoist `_transferScaled` into `AToken` ([#17](https://github.com/sparkdotfi/sparklend-v1-core/pull/17)) ([88cee7f](https://github.com/sparkdotfi/sparklend-v1-core/commit/88cee7ff76fbd4f40599afa1a529ff261d6e4094)) ([#19](https://github.com/sparkdotfi/sparklend-v1-core/pull/19)) ([f6a9fd9](https://github.com/sparkdotfi/sparklend-v1-core/commit/f6a9fd9b640a3d64347fc070cd8f1c38671fdbfa)) ([#20](https://github.com/sparkdotfi/sparklend-v1-core/pull/20)) ([ace6546](https://github.com/sparkdotfi/sparklend-v1-core/commit/ace6546a0af51b9a6104030cdd5f288ebe30e130)) ([#26](https://github.com/sparkdotfi/sparklend-v1-core/pull/26)) ([fe46f3d](https://github.com/sparkdotfi/sparklend-v1-core/commit/fe46f3d34c5e03998c7c1d237c0ed5c8c5160172))
+
+# Changelog of Aave V3 Core before SparkLend Fork
+
 ## [1.19.2](https://github.com/aave/aave-v3-core/compare/v1.19.1...v1.19.2) (2023-10-17)
 
 
