@@ -85,8 +85,8 @@ abstract contract MintableScaledBalanceToken is IncentivizedERC20, IScaledBalanc
 
     // Since the last moment the account's balance was altered, it has accrued balance that needs to
     // be reflected in the `Transfer` and `Mint` events in addition to the amount being minted.
-    uint256 accruedRebasedBalance = oldScaledBalance.rayMul(index) -
-      oldScaledBalance.rayMul(_userState[onBehalfOf].additionalData);
+    uint256 accruedRebasedBalance = _getRebasedAmount(oldScaledBalance, index, roundingMode) -
+      _getRebasedAmount(oldScaledBalance, _userState[onBehalfOf].additionalData, roundingMode);
 
     _userState[onBehalfOf].additionalData = index.toUint128();
 
@@ -131,8 +131,8 @@ abstract contract MintableScaledBalanceToken is IncentivizedERC20, IScaledBalanc
     // Since the last moment the account's balance was altered, it has accrued balance that needs to
     // be reflected in the `Transfer` and `Burn`/`Mint` events in addition to the amount being
     // burned.
-    uint256 accruedRebasedBalance = oldScaledBalance.rayMul(index) -
-      oldScaledBalance.rayMul(_userState[user].additionalData);
+    uint256 accruedRebasedBalance = _getRebasedAmount(oldScaledBalance, index, roundingMode) -
+      _getRebasedAmount(oldScaledBalance, _userState[user].additionalData, roundingMode);
 
     _userState[user].additionalData = index.toUint128();
 
