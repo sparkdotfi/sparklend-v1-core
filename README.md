@@ -16,7 +16,26 @@ See the link to the technical paper or visit the Aave Developer docs
 
 ## Audits and Formal Verification
 
-You can find all audit reports under the audits folder.
+Audit reports are hosted on the auditors' public portfolio pages:
+
+| Auditor | Report | Date |
+| --- | --- | --- |
+| ChainSecurity | [MakerDAO Core Updates to SparkLend](https://www.chainsecurity.com/security-audit/makerdao-core-updates-to-sparklend/) | 2024-03-15 |
+
+ChainSecurity reports are cumulative: each portfolio page hosts the latest version of the report, which covers all previously reviewed versions.
+
+### Other reports
+
+The following reports are not available on an auditor portfolio page and are kept in this repository:
+
+- [OpenZeppelin (01-11-2021_OpenZeppelin_AaveV3.pdf)](./audits/01-11-2021_OpenZeppelin_AaveV3.pdf)
+- [Trail of Bits (07-01-2022_TrailOfBits_AaveV3.pdf)](./audits/07-01-2022_TrailOfBits_AaveV3.pdf)
+- [PeckShield (09-12-2022_PeckShield_AaveV3-0-1.pdf)](./audits/09-12-2022_PeckShield_AaveV3-0-1.pdf)
+- [PeckShield (14-01-2022_PeckShield_AaveV3.pdf)](./audits/14-01-2022_PeckShield_AaveV3.pdf)
+- [Sigma Prime (19-04-2023_SigmaPrime_AaveV3-0-2.pdf)](./audits/19-04-2023_SigmaPrime_AaveV3-0-2.pdf)
+- [Sigma Prime (23-12-2022_SigmaPrime_AaveV3-0-1.pdf)](./audits/23-12-2022_SigmaPrime_AaveV3-0-1.pdf)
+- [ABDK (27-01-2022_ABDK_AaveV3.pdf)](./audits/27-01-2022_ABDK_AaveV3.pdf)
+- [Sigma Prime (27-01-2022_SigmaPrime_AaveV3.pdf)](./audits/27-01-2022_SigmaPrime_AaveV3.pdf)
 
 ## Test
 
